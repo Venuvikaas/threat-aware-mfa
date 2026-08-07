@@ -190,4 +190,13 @@ describe("POST /api/v1/challenges/:id/verify", () => {
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe("CHALLENGE_ERROR");
   });
+
+  it("rejects a URL/body challengeId mismatch", async () => {
+    const { challenge } = await createChallenge();
+    const res = await request(api)
+      .post(`/api/v1/challenges/other_id/verify`)
+      .send({ challengeId: challenge.challengeId, response: { simulatedOk: true } });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("VALIDATION_ERROR");
+  });
 });

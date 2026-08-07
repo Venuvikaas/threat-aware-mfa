@@ -5,12 +5,12 @@
  * POST /api/v1/challenges/:id/verify      verify a one-time expiring challenge
  *
  * The verify request body carries `challengeId` per the frozen contract; the
- * URL segment mirrors it for routing.
+ * URL segment must match it.
  */
 import { Router } from "express";
 import { zCreateChallengeRequest, zVerifyChallengeRequest } from "@mfa/contracts";
 import type { Db } from "../db/connection.js";
-import { validate } from "../middleware/errorHandler.js";
+import { validate, validationError } from "../middleware/errorHandler.js";
 import { ChallengeService } from "../services/challengeService.js";
 
 export function createChallengeRoutes(deps: { db: Db }): Router {
@@ -28,6 +28,11 @@ export function createChallengeRoutes(deps: { db: Db }): Router {
 
   router.post("/:challengeId/verify", validate(zVerifyChallengeRequest), (req, res, next) => {
     try {
+      if (req.params.challengeId !== req.body.challengeId) {
+        throw validationError({
+          challengeId: "path and body challengeId must match",
+        });
+      }
       const response = service.verifyChallenge(req.body.challengeId, req.body.response);
       res.json(response);
     } catch (err) {
