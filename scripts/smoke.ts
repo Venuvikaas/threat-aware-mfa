@@ -248,8 +248,12 @@ async function main(): Promise<number> {
 }
 
 main()
-  .then((code) => process.exit(code))
+  .then((code) => {
+    // process.exitCode (not process.exit): on Windows, forcing an immediate
+    // exit while undici keep-alive sockets linger trips a libuv assertion.
+    process.exitCode = code;
+  })
   .catch((err) => {
     console.error(err);
-    process.exit(1);
+    process.exitCode = 1;
   });
