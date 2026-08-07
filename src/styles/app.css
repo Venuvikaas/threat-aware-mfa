@@ -696,3 +696,118 @@ input {
     flex-direction: column;
   }
 }
+
+/* ---------- Phase 5 polish ---------- */
+
+.shared-risk-anchor {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-bottom: 0.85rem;
+}
+
+.same-risk-badge {
+  flex: 0 0 auto;
+  padding: 0.5rem 0.9rem;
+  border-radius: 12px;
+  background: #1e40af;
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  box-shadow: 0 2px 6px rgba(30, 64, 175, 0.35);
+}
+
+.shared-risk-label {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--evidence);
+}
+
+.shared-risk-question {
+  margin: 0.2rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #1e40af;
+}
+
+/* Primary (hypothesis-driving) evidence chip */
+.evidence-chip.is-primary {
+  border-color: #fde68a;
+  background: var(--threat-bg);
+  color: #92400e;
+  box-shadow: 0 0 0 1px #fde68a inset;
+}
+
+.evidence-chip.is-primary .evidence-chip-dot {
+  background: var(--threat);
+}
+
+.evidence-primary-tag {
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: #fde68a;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Outcome as the strongest result state */
+.outcome-card {
+  border-width: 2px;
+}
+
+.outcome-card-message {
+  font-size: 1.15rem;
+  line-height: 1.35;
+}
+
+.outcome-recovery {
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.18);
+}
+
+.outcome-selected {
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.18);
+}
+
+/* Excluded factor as the third anchor */
+.factor-excluded {
+  border-width: 1.5px;
+}
+
+/* Restrained state transitions */
+.evidence-chip,
+.threat-summary,
+.distrust-item,
+.outcome-card,
+.baseline-card,
+.scenario-panel,
+.factor-card,
+.shared-risk-badge,
+.same-risk-badge {
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.factor-card:hover {
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+/* Presentation readability */
+@media (min-width: 1200px) {
+  .app-shell {
+    padding-top: 3rem;
+  }
+  .app-title {
+    font-size: 2rem;
+  }
+  .trace-step {
+    padding: 1.2rem 1.6rem;
+  }
+  .factor-reason {
+    font-size: 0.9rem;
+  }
+}
