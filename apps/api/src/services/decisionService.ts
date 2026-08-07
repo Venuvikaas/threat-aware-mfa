@@ -200,7 +200,20 @@ export class DecisionService {
         });
       }
     });
-    persist();
+
+    try {
+      persist();
+    } catch (err) {
+      // A concurrent duplicate that slipped past the pre-check (or any future
+      // async interleaving) must surface as the frozen 409 CONFLICT, never as
+      // an internal error.
+      if (isUniqueConstraintError(err)) {
+        throw conflictError("Duplicate client transaction id", {
+          clientTransactionId: req.transaction.clientTransactionId,
+        });
+      }
+      throw err;
+    }
 
     return this.toResponse(
       decisionId,
@@ -280,4 +293,12 @@ export class DecisionService {
       createdAt,
     };
   }
+}
+
+function isUniqueConstraintError(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { code?: string }).code === "SQLITE_CONSTRAINT_UNIQUE"
+  );
 }
