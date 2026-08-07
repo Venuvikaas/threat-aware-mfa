@@ -48,8 +48,11 @@ export const zThreatRule = z.object({
   threatId: z.enum(THREAT_IDS),
   kind: z.enum(THREAT_RULE_KINDS),
   predicate: zEvidencePredicate,
-  /** Primary rules only count fresh (ACTIVE) evidence. */
-  requireFresh: z.boolean().default(true),
+  /**
+   * Primary rules only count fresh (ACTIVE) evidence. Optional: the
+   * engine structurally enforces freshness for PRIMARY rules regardless.
+   */
+  requireFresh: z.boolean().optional(),
 });
 export type ThreatRule = z.infer<typeof zThreatRule>;
 
