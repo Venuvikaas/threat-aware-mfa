@@ -1,7 +1,7 @@
 /**
  * Device persistence. Devices are keyed by their client-supplied device ID;
- * a known device is updated with the latest seen time, an unknown device is
- * created as a synthetic demo entity.
+ * a known device is refreshed with the latest seen time only — its first-seen
+ * time is preserved. An unknown device is created as a synthetic demo entity.
  */
 import type { Db } from "../db/connection.js";
 
@@ -44,6 +44,13 @@ export class DeviceRepository {
     return row ? toDevice(row) : undefined;
   }
 
+  findByUserId(userId: string): DeviceRow[] {
+    const rows = this.db
+      .prepare("SELECT * FROM devices WHERE user_id = ? ORDER BY id")
+      .all(userId) as DeviceRecord[];
+    return rows.map(toDevice);
+  }
+
   create(input: DeviceRow): DeviceRow {
     this.db
       .prepare(
@@ -57,15 +64,13 @@ export class DeviceRepository {
     return input;
   }
 
-  /** Insert if missing; otherwise refresh the seen times. */
+  /** Insert if missing; otherwise refresh only the last-seen time. */
   upsert(input: DeviceRow): DeviceRow {
     const existing = this.findById(input.id);
     if (!existing) return this.create(input);
     this.db
-      .prepare(
-        `UPDATE devices SET last_seen_at = ?, first_seen_at = ? WHERE id = ?`
-      )
-      .run(input.lastSeenAt, input.firstSeenAt, input.id);
-    return { ...existing, lastSeenAt: input.lastSeenAt, firstSeenAt: input.firstSeenAt };
+      .prepare("UPDATE devices SET last_seen_at = ? WHERE id = ?")
+      .run(input.lastSeenAt, input.id);
+    return { ...existing, lastSeenAt: input.lastSeenAt };
   }
 }

@@ -1,13 +1,15 @@
 /**
  * Express application factory for the Threat-Aware MFA Decision Service.
  *
- * `createApp` receives its dependencies (currently the database handle) so
- * tests can inject an in-memory database. Health checks the live database;
- * decision routes land in Phase 3.
+ * `createApp` receives its dependencies (database handle + demo mode) so
+ * tests can inject an in-memory database. Routes: health, decisions + audit,
+ * and demo presets/reset. Challenge routes land in Phase 6.
  */
 import express from "express";
 import type { Db } from "./db/connection.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+import { createDecisionRoutes } from "./routes/decisionRoutes.js";
+import { createDemoRoutes } from "./routes/demoRoutes.js";
 
 export interface AppDeps {
   db: Db;
@@ -17,6 +19,8 @@ export interface AppDeps {
 
 export function createApp(deps: AppDeps): express.Express {
   const app = express();
+  const demoMode = deps.demoMode ?? true;
+
   app.use(express.json());
 
   /* Health ----------------------------------------------------------------- */
@@ -45,6 +49,11 @@ export function createApp(deps: AppDeps): express.Express {
         "Threat-Aware MFA Decision Service. API reference: docs/API.md. Health: GET /health",
     });
   });
+
+  /* API v1 ---------------------------------------------------------------- */
+
+  app.use("/api/v1/decisions", createDecisionRoutes({ db: deps.db, demoMode }));
+  app.use("/api/v1/demo", createDemoRoutes({ db: deps.db, demoMode }));
 
   /* 404 + errors ----------------------------------------------------------- */
 

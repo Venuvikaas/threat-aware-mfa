@@ -39,6 +39,13 @@ export class UserRepository {
     return row ? toUser(row) : undefined;
   }
 
+  all(): UserRow[] {
+    const rows = this.db
+      .prepare("SELECT * FROM users ORDER BY id")
+      .all() as UserRecord[];
+    return rows.map(toUser);
+  }
+
   create(input: UserRow): UserRow {
     this.db
       .prepare(
