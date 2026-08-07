@@ -157,3 +157,27 @@ Reason: Each reinforces the demo without adding a dependency or a failure mode; 
 Rejected: File-download export (distracts from the demo), any additional keyboard shortcuts beyond the three, and making the preview look like live authentication.
 
 Consequence: The demo path still makes zero network requests; the export writes only the exact engine `Decision` object.
+
+---
+
+## Pivot to backend-first decision service
+
+Decision: Replace the frontend-only simulator with a backend-first product prototype: a Node/TypeScript + Express API with SQLite persistence, pure risk/threat/policy engines running server-side, and a React client that submits transactions through the API and renders the returned decision, factor eligibility, and persisted audit timeline.
+
+Reason: The judged thesis is an integration boundary — "signals enter through an API, policy is enforced on the server, factor challenges cannot bypass the decision, and every result is auditable" (docs/EXECUTION.md). A static frontend cannot demonstrate that claim; the execution framework was replaced accordingly. This entry supersedes the two earlier "frontend-only application" and "no database or backend" decisions, which remain in the log as history.
+
+Rejected: Staying with the frontend-only simulator, and the lemma.work agent platform (Python/FastAPI + PostgreSQL + Redis + task queues — every infrastructure category the execution framework bans).
+
+Consequence: The API owns decisions and state; the frontend never calculates risk, threat, or factor eligibility and never decides whether a factor is allowed.
+
+---
+
+## Synthetic signal boundary
+
+Decision: All signal providers are deterministic mock adapters; every provider result carries explicit provenance (name, value, source, observedAt, `synthetic: true`) and is stored that way. The demo database holds only synthetic users, devices, and transactions. The required factor path is an explicit simulated passkey adapter; real WebAuthn is a stretch phase with kill criteria.
+
+Reason: The product must demonstrate the provider *contract* — and the policy decision that follows from it — without pretending to detect real fraud or to connect to real telecom, bank, UPI, or Account Aggregator systems.
+
+Rejected: Live carriers, UPI, Account Aggregator, IP-reputation, device-fingerprinting SDKs, real SMS delivery, and any claim that those integrations exist. Mock providers must never fabricate a safe signal on failure; failure yields an explicit unknown signal.
+
+Consequence: Every stored signal is tagged synthetic with source and observed time; provider failure is explicit rather than silent; and the UI labels simulation visibly. No OTP, passkey private key, biometric data, or secret is ever stored.

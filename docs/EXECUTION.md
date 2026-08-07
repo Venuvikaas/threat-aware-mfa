@@ -1,864 +1,1274 @@
-# Threat-Aware MFA Policy Simulator - Execution Framework & Mega Checklist
+# Threat-Aware MFA Decision Service - Execution Framework & Mega Checklist
 
-#### Solo developer · 12-hour build · one commit per completed box
+#### Solo developer · 12-hour hackathon build · deployable vertical slice · one commit per completed box
 
-This document converts the final PRD into a build sequence optimized for one developer, one machine, and one deterministic hackathon demo.
+This document replaces the frontend-only simulator plan with a **backend-first product prototype**. The system receives transaction and session signals through an API, evaluates risk and likely threat, applies authentication policy, stores an auditable decision, and returns the allowed and blocked authentication factors to a React client.
+
+The goal is not to imitate a production bank stack. The goal is to ship the smallest credible system that demonstrates a real integration boundary, stateful decisions, explainable policy enforcement, and one working authentication path without hiding behind static UI fixtures.
+
+---
 
 ## How to read this
 
-- **[DEV]** = implementation work.
-- **[TEST]** = automated or manual verification.
-- **[DEMO]** = work that directly improves the judged experience.
-- **[DOCS]** = submission and decision documentation.
-- **🔴 BLOCKING** = complete before dependent work starts.
-- **🟡 OPTIONAL** = do only after the complete must-build path passes.
-- **✂ KILL** = remove immediately if its stated condition occurs.
-- **🔗 CONTRACT** = freeze the data shape before UI work.
-- Tick a box only when its exit condition passes.
-- Every completed box ends with the suggested small commit.
+- **[API]** Backend endpoint or transport work
+- **[ENGINE]** Risk, threat, or policy decision logic
+- **[DATA]** Database, repository, seed, or audit work
+- **[WEB]** React frontend work
+- **[AUTH]** Authentication-factor execution
+- **[TEST]** Automated or manual verification
+- **[DEMO]** Judged experience and presentation reliability
+- **[DOCS]** README, decisions, API contract, and demo script
+- **🔴 BLOCKING** Complete before dependent work begins
+- **🟡 STRETCH** Attempt only after the complete critical path passes
+- **✂ KILL** Remove when its stated condition is reached
+- **🔗 CONTRACT** Freeze the interface before parallel implementation
 
-## Non-negotiable product boundary
-
-Build a **frontend-only, deterministic policy simulator** that demonstrates:
-
-> Same aggregate risk can require different authentication decisions because different channels or security properties may be under suspicion.
-
-The product is not a fraud detector, identity provider, authentication platform, real payment system, or trained AI model.
-
-## Final build target
-
-The submission contains:
-
-- One comparison workspace
-- Two seeded hero scenarios
-- One pure TypeScript decision engine
-- One versioned static policy
-- Three factor outcomes: SMS OTP, passkey, assisted recovery
-- One fair scalar baseline
-- One passkey-enrollment toggle
-- One deterministic reset action
-- Automated decision-kernel tests
-- A polished 2 to 3 minute demo path
+Every checked box should leave the repository runnable and end with the suggested commit.
 
 ---
 
-# PART 1 - Engineering framework
+# PART 1 - Product boundary
 
-## 1. Contract-first development 🔗
+## 1. What this project is
 
-Freeze the domain contract before creating visual components. The decision engine and UI must communicate through exact TypeScript types.
+A transaction authentication decision service with four user-visible capabilities:
 
-Required contracts:
+1. Accept a transaction plus realistic session, account, device, and telecom indicators through a REST API.
+2. Produce deterministic risk, threat, and factor-eligibility decisions.
+3. Store the decision and reason trace in an audit log.
+4. Let a React frontend submit transactions, inspect decisions, and complete a selected factor through a safe demo adapter.
 
-```ts
-type RiskLevel = "high";
-
-type ThreatHypothesis =
-  | "sim_channel_compromise"
-  | "phishing"
-  | "insufficient_evidence";
-
-type SupportBand =
-  | "high_support"
-  | "moderate_support"
-  | "insufficient_evidence";
-
-type FactorId = "sms_otp" | "passkey";
-
-type FactorState = "eligible" | "excluded" | "unavailable";
-
-type DecisionOutcome =
-  | "factor_selected"
-  | "assisted_recovery";
-
-interface Scenario {
-  id: string;
-  title: string;
-  aggregateRisk: RiskLevel;
-  requiredAssurance: number;
-  transaction: {
-    amount: number;
-    currency: "INR";
-    payeeType: "new" | "known";
-  };
-  indicators: {
-    recentSimChange: boolean;
-    phishingRelayIndicator: boolean;
-    newDevice: boolean;
-    unusualSession: boolean;
-    newPayee: boolean;
-  };
-  capabilities: {
-    passkeyEnrolled: boolean;
-  };
-}
-
-interface FactorEvaluation {
-  factorId: FactorId;
-  state: FactorState;
-  reasonCode: string;
-  reason: string;
-  assurance: number;
-}
-
-interface Decision {
-  scenarioId: string;
-  policyVersion: string;
-  hypothesis: ThreatHypothesis;
-  supportBand: SupportBand;
-  evidenceUsed: string[];
-  doNotTrust: string[];
-  factors: FactorEvaluation[];
-  selectedFactor: FactorId | null;
-  outcome: DecisionOutcome;
-  outcomeMessage: string;
-}
-```
-
-Contract rules:
-
-- No nullable or optional fields unless explicitly required.
-- No decimal threat probabilities.
-- No time, random, browser, storage, or network values in the decision function.
-- Every factor receives exactly one state.
-- Every non-eligible factor receives one stable reason code and one human-readable reason.
-- Unsupported evidence returns `insufficient_evidence`; it must not produce a confident threat.
-
-## 2. Pure-kernel-first development
-
-Do not begin with the polished UI. The first complete artifact must be:
-
-```ts
-evaluateScenario(scenario, policy): Decision
-```
-
-The kernel is complete only when scenario tests prove:
-
-- SIM-change evidence produces SIM-channel-compromise reasoning.
-- Phishing-relay evidence produces phishing reasoning.
-- Passkey availability changes the outcome without changing the threat hypothesis.
-- No excluded or unavailable factor can be selected.
-- Identical inputs return deeply equal outputs.
-
-## 3. Vertical-slice development
-
-Build one narrow end-to-end slice before adding the second scenario:
-
-`SIM-swap fixture -> decision engine -> factor cards -> selected passkey -> toggle unavailable -> assisted recovery`
-
-Only after this works should the phishing comparison be added.
-
-## 4. Demo-data discipline
-
-- All scenarios are curated fixtures committed to the repository.
-- The UI must visibly display `Synthetic indicators`.
-- No external requests are allowed on the demo path.
-- Reset must restore the exact default state.
-- The default view itself must communicate the idea without configuration.
-
-## 5. Git workflow
-
-- Use trunk-based development on `main`.
-- Make one small commit per completed checklist box.
-- Pull before starting a new phase if working across machines.
-- Push after each stable phase.
-- Never commit generated secrets, `.env`, editor caches, or build artifacts.
-
-Commit scopes:
-
-- `engine` - classifier and policy evaluator
-- `policy` - factor matrix and policy fixture
-- `scenario` - demo fixtures
-- `ui` - visual components and interaction
-- `test` - unit and scenario tests
-- `style` - presentation polish
-- `docs` - README, decisions, execution, demo script
-- `chore` - project configuration
-
-## 6. Decision log
-
-Create `docs/DECISIONS.md`. Every material change uses four lines:
-
-```md
-## Decision title
-Decision: What was chosen.
-Reason: Why it increases build reliability or demo impact.
-Rejected: What was not chosen.
-Consequence: What limitation is accepted.
-```
-
-Required initial decisions:
-
-- Frontend-only application
-- Deterministic rules, not trained AI
-- Confidence bands, not probabilities
-- Assurance as an eligibility gate
-- No real WebAuthn
-- No database or backend
-- Fair scalar baseline
-- Assisted recovery as an external policy outcome
-
-## 7. Smoke gate
-
-A single command must verify the product before every demo run:
-
-```bash
-npm run check
-```
-
-It should run:
-
-1. TypeScript validation
-2. Unit and scenario tests
-3. Production build
-
-The command must exit non-zero on any failure.
-
-## 8. Kill criteria
-
-Apply these immediately. Do not negotiate with sunk cost.
-
-- ✂ If any feature needs a backend, cut the feature.
-- ✂ If any feature needs browser permissions, cut the feature.
-- ✂ If real passkey execution is proposed, retain only the simulated selected-factor card.
-- ✂ If a visual requires a charting library, replace it with cards, chips, or a list.
-- ✂ If an explanation needs an LLM, replace it with a fixed reason code and deterministic copy.
-- ✂ If a third threat scenario is proposed, cut it.
-- ✂ If a policy editor is proposed, keep the policy as a committed fixture.
-- ✂ If a rule cannot be defended in one sentence, narrow or remove it.
-- ✂ If the core comparison is not stable, remove every nice-to-have.
-
-## 9. Visual system
-
-Use one consistent visual grammar:
-
-- **Blue or neutral:** observed evidence
-- **Amber:** suspected threat or caution
-- **Red:** excluded factor or untrusted dependency
-- **Green:** eligible or selected factor
-- **Gray:** unavailable factor
-- **Purple or dark neutral:** assisted recovery outcome
-
-Do not use color as the only signal. Every state includes a label and icon or shape change.
-
-## 10. Claim discipline
-
-The UI and presentation must never claim:
-
-- the app detected a SIM swap or phishing attack,
-- the support bands are calibrated probabilities,
-- passkeys defeat every device-compromise scenario,
-- the product proves universal factor independence,
-- the app executes or secures a real payment,
-- the product is compliant or production-ready,
-- existing identity platforms cannot express similar rules.
-
-Use these approved formulations:
-
-- `The scenario supplies synthetic indicators.`
-- `The engine applies a deterministic demonstration policy.`
-- `The policy marks SMS OTP incompatible with this suspected failure path.`
-- `The prototype selects a policy outcome; it does not execute authentication.`
-
----
-
-# PART 2 - Repository layout
+Core system flow:
 
 ```text
-threat-aware-mfa/
-  src/
-    engine/
-      evaluateScenario.ts
-      classifyThreat.ts
-      evaluateFactors.ts
-      selectOutcome.ts
-      types.ts
-    policy/
-      demoPolicy.ts
-      reasonCodes.ts
-    scenarios/
-      simSwap.ts
-      phishing.ts
-    components/
-      AppShell.tsx
-      ComparisonWorkspace.tsx
-      ScenarioPanel.tsx
-      SharedRiskHeader.tsx
-      EvidenceList.tsx
-      ThreatSummary.tsx
-      FactorCard.tsx
-      DecisionTrace.tsx
-      BaselineCard.tsx
-      CapabilityToggle.tsx
-      OutcomeCard.tsx
-    styles/
-      tokens.css
-      app.css
-    App.tsx
-    main.tsx
-  tests/
-    classifyThreat.test.ts
-    evaluateFactors.test.ts
-    scenarios.test.ts
-    determinism.test.ts
-  docs/
-    PRD.md
-    EXECUTION.md
-    DECISIONS.md
-    demo-script.md
-  public/
-  .gitignore
-  README.md
-  package.json
-  tsconfig.json
-  vite.config.ts
+React Client
+    |
+    | POST /api/v1/decisions
+    v
+Backend API
+    |
+    +--> Input validation and signal normalization
+    |
+    +--> Risk Engine
+    |       -> LOW | MEDIUM | HIGH
+    |
+    +--> Threat Engine
+    |       -> SIM_CHANNEL_COMPROMISE
+    |       -> PHISHING
+    |       -> INSUFFICIENT_EVIDENCE
+    |
+    +--> Policy Engine
+    |       -> allowedFactors
+    |       -> blockedFactors
+    |       -> final action
+    |
+    +--> SQLite
+            -> users
+            -> devices
+            -> sessions
+            -> transactions
+            -> decisions
+            -> audit events
 ```
 
-Rules:
+Optional factor execution, isolated from the decision path:
 
-- `engine/` has no React imports.
-- `policy/` contains rules and copy-safe reason metadata, not components.
-- `scenarios/` contains seeded input only, not expected UI output.
-- Components render the `Decision` object; they do not duplicate decision logic.
-- Tests import the same fixtures and policy used by the app.
+```text
+Selected PASSKEY
+    |
+    +--> Preferred stretch: real WebAuthn ceremony
+    |
+    +--> Required fallback: explicit simulated verification adapter
+```
+
+## 2. What makes this a product rather than a research demo
+
+- The frontend consumes a real backend contract.
+- The backend owns decisions and state.
+- Signals enter through an API rather than being hardcoded into rendered components.
+- Decisions are persisted and can be retrieved later.
+- Policy outputs are machine-readable and suitable for integration.
+- Authentication factors are represented as executable adapters, even if only one demo adapter is implemented.
+- Audit records show exactly why a factor was allowed or blocked.
+
+## 3. What this project still does not claim
+
+- It does not detect real fraud from production data.
+- It does not connect to a bank, UPI network, Account Aggregator, telecom operator, or credit bureau.
+- It does not claim calibrated risk probabilities.
+- It does not claim compliance or production readiness.
+- It does not use real money.
+- It does not implement customer recovery.
+- It does not prove that a passkey defeats every device-compromise scenario.
+- Mock signal providers simulate upstream contracts and must be visibly labeled.
+
+## 4. Judge-facing thesis
+
+> Most risk systems decide how much authentication is required. This service also decides which authentication factors should not be trusted for the suspected attack path.
 
 ---
 
-# PART 3 - Mega checklist
+# PART 2 - Ruthless architecture
 
-## ☑ PHASE 0 - Freeze scope and contracts 🔴 BLOCKING
+## 1. Selected stack
 
-- [x] **[DOCS]** Place the final PRD at `docs/PRD.md`.  
-  Commit: `docs: add final product requirements`
+### Frontend
 
-- [x] **[DOCS]** Add this file as `docs/EXECUTION.md`.  
-  Commit: `docs: add execution framework`
+- React
+- Vite
+- TypeScript
+- Native CSS or an already-installed lightweight utility layer
 
-- [x] **[DOCS]** Create `docs/DECISIONS.md` with the eight required initial decisions.  
-  Commit: `docs: record final scope decisions`
+### Backend
 
-- [x] **[DEV]** Initialize a React, Vite, and TypeScript application with no backend template.  
-  Commit: `chore: initialize client application`
+- Node.js
+- Fastify or Express with TypeScript
+- Zod for request and response validation
 
-- [x] **[DEV]** Add `.gitignore` for `.env`, `node_modules`, build output, coverage, editor files, and OS files.  
-  Commit: `chore: add repository hygiene`
+Use Fastify if the developer is already comfortable with it. Otherwise use Express. Do not spend build time comparing frameworks.
 
-- [x] **[DEV]** Create the repository folders shown above.  
-  Commit: `chore: scaffold project structure`
+### Data
 
-- [x] **[DEV]** 🔗 Freeze all domain types in `src/engine/types.ts`.  
-  Commit: `feat(engine): freeze decision contracts`
+- SQLite
+- Prisma only if the developer already knows its migration flow
+- Otherwise use `better-sqlite3` with explicit SQL migrations
 
-- [x] **[TEST]** Confirm the project installs, type-checks, and renders the untouched app shell.  
-  Commit: `test: verify project bootstrap`
+### Testing
+
+- Vitest for engine and API tests
+- Supertest when using Express, or Fastify injection when using Fastify
+
+### Authentication
+
+- Required: deterministic simulated factor adapter
+- Stretch: SimpleWebAuthn browser and server packages
+
+## 2. Rejected infrastructure
+
+Do not add:
+
+- NestJS unless the repository already uses it
+- Redis
+- queues
+- microservices
+- Kafka
+- Docker Compose
+- Kubernetes
+- event buses
+- separate risk, threat, and policy deployments
+- cloud databases
+- OAuth providers
+- LLM APIs
+- vector databases
+- native device fingerprinting SDKs
+- live telecom, UPI, Account Aggregator, or IP-reputation integrations
+
+The backend is a modular monolith. Risk, threat, policy, factor adapters, and persistence are separate modules in one process.
+
+## 3. Why no Redis
+
+The demo has one process, one database, no distributed lock requirement, no background job, and no cross-instance session problem. SQLite-backed challenge and session state is sufficient.
+
+## 4. Why mock signal providers are acceptable
+
+The service must demonstrate the **contract** by which real providers would deliver signals. Provider adapters return deterministic data with explicit provenance:
+
+```json
+{
+  "name": "sim_change_status",
+  "value": true,
+  "source": "mock_telco_adapter",
+  "observedAt": "2026-08-07T12:00:00.000Z",
+  "synthetic": true
+}
+```
+
+The backend must not pretend it discovered these signals independently.
+
+## 5. System modules
+
+```text
+apps/
+  web/
+  api/
+packages/
+  contracts/
+  decision-core/
+  demo-data/
+docs/
+```
+
+Backend modules:
+
+```text
+api/src/
+  routes/
+  services/
+    decisionService.ts
+  engines/
+    riskEngine.ts
+    threatEngine.ts
+    policyEngine.ts
+  providers/
+    signalProvider.ts
+    mockSignalProvider.ts
+  factors/
+    factorAdapter.ts
+    simulatedPasskeyAdapter.ts
+    webauthnAdapter.ts        # stretch only
+  repositories/
+    userRepository.ts
+    transactionRepository.ts
+    decisionRepository.ts
+    auditRepository.ts
+  db/
+    migrations/
+    connection.ts
+  app.ts
+  server.ts
+```
+
+---
+
+# PART 3 - Frozen contracts 🔗
+
+## 1. Decision request
+
+```ts
+interface CreateDecisionRequest {
+  userId: string;
+  transaction: {
+    clientTransactionId: string;
+    amountMinor: number;
+    currency: "INR";
+    payeeId: string;
+    payeeIsKnown: boolean;
+  };
+  session: {
+    sessionId: string;
+    ageSeconds: number;
+    failedLoginCount: number;
+    ipAddress: string;
+    asn: string;
+    country: string;
+  };
+  device: {
+    deviceId: string;
+    trusted: boolean;
+    firstSeen: boolean;
+    browserFingerprint: string;
+  };
+  signals: {
+    recentSimChange: boolean | null;
+    geoDistanceFromLastLoginKm: number | null;
+    phishingRelayIndicator: boolean;
+  };
+}
+```
+
+## 2. Decision response
+
+```ts
+type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
+
+type ThreatType =
+  | "SIM_CHANNEL_COMPROMISE"
+  | "PHISHING"
+  | "INSUFFICIENT_EVIDENCE";
+
+type FactorId = "PASSKEY" | "SMS_OTP";
+
+type DecisionAction =
+  | "ALLOW_WITH_FACTOR"
+  | "REFER_TO_ASSISTED_RECOVERY";
+
+interface FactorDecision {
+  factor: FactorId;
+  status: "ALLOWED" | "BLOCKED" | "UNAVAILABLE";
+  reasonCode: string;
+  reason: string;
+}
+
+interface CreateDecisionResponse {
+  decisionId: string;
+  transactionId: string;
+  policyVersion: string;
+  risk: {
+    level: RiskLevel;
+    reasons: string[];
+  };
+  threat: {
+    type: ThreatType;
+    support: "HIGH" | "MODERATE" | "INSUFFICIENT";
+    evidence: string[];
+  };
+  factors: FactorDecision[];
+  allowedFactors: FactorId[];
+  blockedFactors: FactorId[];
+  selectedFactor: FactorId | null;
+  action: DecisionAction;
+  createdAt: string;
+}
+```
+
+## 3. Factor challenge contract
+
+```ts
+interface CreateChallengeRequest {
+  decisionId: string;
+  factor: FactorId;
+}
+
+interface CreateChallengeResponse {
+  challengeId: string;
+  factor: FactorId;
+  mode: "SIMULATED" | "WEBAUTHN";
+  expiresAt: string;
+  publicOptions?: unknown;
+}
+
+interface VerifyChallengeRequest {
+  challengeId: string;
+  response: unknown;
+}
+
+interface VerifyChallengeResponse {
+  challengeId: string;
+  verified: boolean;
+  transactionStatus: "AUTHORIZED" | "DENIED" | "PENDING_RECOVERY";
+}
+```
+
+## 4. Audit event contract
+
+```ts
+interface AuditEvent {
+  id: string;
+  decisionId: string;
+  eventType:
+    | "DECISION_CREATED"
+    | "FACTOR_BLOCKED"
+    | "FACTOR_SELECTED"
+    | "CHALLENGE_CREATED"
+    | "CHALLENGE_VERIFIED"
+    | "RECOVERY_REQUIRED";
+  reasonCode: string;
+  details: Record<string, unknown>;
+  createdAt: string;
+}
+```
+
+## 5. Contract rules
+
+- API input and output are runtime-validated.
+- Money is stored as integer minor units.
+- IDs are server-generated except client transaction ID, session ID, and device ID.
+- Server time owns `createdAt`, expiry, and audit timestamps.
+- The frontend never calculates risk, threat, or factor eligibility.
+- The frontend never decides whether a factor is allowed.
+- An unavailable or blocked factor cannot create a challenge.
+- Repeated use of the same client transaction ID must not silently create conflicting decisions.
+- Every decision stores policy version and normalized evidence.
+- Synthetic provider data is tagged as synthetic in storage and in the UI.
+
+---
+
+# PART 4 - Data model
+
+## 1. Minimum tables
+
+### users
+
+```text
+id
+name
+account_created_at
+passkey_enrolled
+created_at
+```
+
+### devices
+
+```text
+id
+user_id
+trusted
+browser_fingerprint
+first_seen_at
+last_seen_at
+```
+
+### sessions
+
+```text
+id
+user_id
+device_id
+ip_address
+asn
+country
+started_at
+failed_login_count
+```
+
+### transactions
+
+```text
+id
+client_transaction_id
+user_id
+amount_minor
+currency
+payee_id
+payee_is_known
+status
+created_at
+```
+
+### signals
+
+```text
+id
+transaction_id
+name
+value_json
+source
+synthetic
+observed_at
+```
+
+### decisions
+
+```text
+id
+transaction_id
+risk_level
+risk_reasons_json
+threat_type
+threat_support
+threat_evidence_json
+allowed_factors_json
+blocked_factors_json
+selected_factor
+action
+policy_version
+created_at
+```
+
+### factor_evaluations
+
+```text
+id
+decision_id
+factor
+status
+reason_code
+reason
+```
+
+### challenges
+
+```text
+id
+decision_id
+factor
+mode
+challenge_data_json
+expires_at
+consumed_at
+verified
+created_at
+```
+
+### audit_events
+
+```text
+id
+decision_id
+event_type
+reason_code
+details_json
+created_at
+```
+
+## 2. Database rules
+
+- SQLite foreign keys enabled.
+- Transaction and decision creation occur in one database transaction.
+- Challenge verification marks the challenge consumed in the same transaction that updates transaction status.
+- A consumed or expired challenge cannot verify again.
+- The audit log is append-only through application code.
+- Store synthetic demo users only.
+- Do not store OTPs, passkey private keys, raw biometric data, or secrets.
+
+---
+
+# PART 5 - Decision logic
+
+## 1. Risk engine
+
+The risk engine creates a categorical output from explicit demonstration rules. It does not generate a fake probability.
+
+Suggested high-risk triggers:
+
+- amount at or above configured high-value threshold,
+- recent SIM change,
+- first-seen device,
+- large geo distance,
+- repeated failed logins,
+- phishing-relay indicator,
+- new payee combined with another major indicator.
+
+The output contains the risk level and exact rule reasons.
+
+## 2. Threat engine
+
+Support only narrow, defensible hypotheses:
+
+### SIM_CHANNEL_COMPROMISE
+
+Required primary evidence:
+
+- `recentSimChange === true`
+
+Supporting context may increase `support` from moderate to high:
+
+- first-seen device,
+- new payee,
+- high-value transfer.
+
+### PHISHING
+
+Required primary evidence:
+
+- `phishingRelayIndicator === true`
+
+Supporting context:
+
+- unusual or first-seen session,
+- new payee,
+- recent failed logins.
+
+### INSUFFICIENT_EVIDENCE
+
+Use when:
+
+- neither primary indicator exists,
+- primary signals conflict,
+- required signal is unavailable and no safe hypothesis can be selected.
+
+No normalized probability vector is allowed.
+
+## 3. Policy engine
+
+Policy evaluation order:
+
+1. Load user factor enrollment.
+2. Load required assurance from transaction policy.
+3. Block threat-incompatible factors.
+4. Mark unenrolled factors unavailable.
+5. Retain factors meeting the assurance requirement.
+6. Select the first allowed factor in fixed preference order.
+7. If none survives, return assisted recovery.
+
+Required demonstration policies:
+
+- SIM channel compromise blocks SMS OTP.
+- Phishing blocks SMS OTP as relayable under this narrow policy.
+- Passkey is allowed for these two supported hypotheses only when enrolled.
+- Insufficient evidence never silently produces a confident factor recommendation. Use a conservative factor policy or assisted recovery, documented in `DECISIONS.md`.
+
+## 4. Fair baseline
+
+A separate baseline function receives only:
+
+- risk level,
+- required assurance,
+- factor enrollment.
+
+It returns the same high-level requirement for equal-risk transactions. It does not receive threat indicators and is not configured to fail deliberately.
+
+The UI uses the baseline only to show information loss, not to claim that all existing systems are naive.
+
+---
+
+# PART 6 - REST API
+
+## Required endpoints
+
+```text
+GET    /health
+POST   /api/v1/decisions
+GET    /api/v1/decisions/:decisionId
+GET    /api/v1/decisions/:decisionId/audit
+POST   /api/v1/challenges
+POST   /api/v1/challenges/:challengeId/verify
+GET    /api/v1/demo/users
+POST   /api/v1/demo/reset
+```
+
+## Endpoint behavior
+
+### GET /health
+
+Returns process and database health. No deep external checks because there are no external providers.
+
+### POST /api/v1/decisions
+
+- Validate request.
+- Load or create synthetic demo entities.
+- Normalize and persist signals.
+- Evaluate risk.
+- Evaluate threat.
+- Evaluate factors.
+- Persist transaction, decision, factor evaluations, and audit events atomically.
+- Return the complete decision response.
+
+### GET /api/v1/decisions/:decisionId
+
+Returns the persisted decision and factor evaluations.
+
+### GET /api/v1/decisions/:decisionId/audit
+
+Returns ordered audit events for the decision.
+
+### POST /api/v1/challenges
+
+- Verify the decision exists.
+- Verify the requested factor is selected or allowed.
+- Reject blocked or unavailable factors.
+- Create an expiring one-time challenge.
+
+### POST /api/v1/challenges/:challengeId/verify
+
+- Reject missing, expired, consumed, or decision-mismatched challenges.
+- Invoke the registered factor adapter.
+- Mark challenge consumed.
+- Update transaction state.
+- Append audit event.
+
+### POST /api/v1/demo/reset
+
+Resets only synthetic demo data. It must be disabled outside demo mode.
+
+---
+
+# PART 7 - Mega checklist
+
+## ☐ PHASE 0 - Repository and contracts 🔴 BLOCKING
+
+- [ ] **[DOCS]** Add the revised product boundary to `docs/DECISIONS.md`.  
+  Commit: `docs: pivot to backend decision service`
+
+- [ ] **[DOCS]** Record what remains simulated and why.  
+  Commit: `docs: define synthetic signal boundary`
+
+- [ ] **[API]** Create workspace structure for `apps/web`, `apps/api`, and shared packages.  
+  Commit: `chore: scaffold full stack workspace`
+
+- [ ] **[API]** Add root scripts for dev, test, type-check, build, and full check.  
+  Commit: `chore: add workspace scripts`
+
+- [ ] **[API]** 🔗 Freeze request, response, challenge, and audit contracts in `packages/contracts`.  
+  Commit: `feat(contracts): freeze api contracts`
+
+- [ ] **[TEST]** Add contract validation tests for valid and invalid payloads.  
+  Commit: `test(contracts): validate api payloads`
+
+- [ ] **[DOCS]** Create `docs/API.md` with endpoint examples and error shapes.  
+  Commit: `docs: add api contract reference`
 
 ### Exit gate
 
-- [x] `npm run dev` renders locally.
-- [x] `npm run build` succeeds.
-- [x] Contracts are committed before decision logic or UI components.
-- [x] The repository contains no backend, database, auth, LLM, or chart dependency.
+- [ ] Web and API packages start independently.
+- [ ] Shared contracts compile in both packages.
+- [ ] No decision logic exists in the frontend.
+- [ ] No unapproved infrastructure dependency is installed.
 
 ---
 
-## ☑ PHASE 1 - Build the policy kernel 🔴 BLOCKING
+## ☐ PHASE 1 - Database and backend spine 🔴 BLOCKING
 
-### Threat classification
+- [ ] **[DATA]** Configure SQLite connection and enable foreign keys.  
+  Commit: `feat(data): initialize sqlite database`
 
-- [x] **[DEV]** Define reason-code constants and approved explanation copy.  
-  Required examples:
-  - `RECENT_SIM_CHANGE`
-  - `PHISHING_RELAY_SIGNAL`
-  - `SMS_CHANNEL_UNTRUSTED`
-  - `FACTOR_RELAYABLE`
-  - `PASSKEY_NOT_ENROLLED`
-  - `ASSURANCE_TOO_LOW`
-  - `INSUFFICIENT_EVIDENCE`
-  
-  Commit: `feat(policy): define stable reason codes`
+- [ ] **[DATA]** Create schema migrations for all minimum tables.  
+  Commit: `feat(data): add core database schema`
 
-- [x] **[DEV]** Define `demoPolicy.ts` with a visible policy version.  
-  Commit: `feat(policy): add versioned demo policy`
+- [ ] **[DATA]** Add seed migration for one synthetic user, one trusted device, one new device, and passkey enrollment state.  
+  Commit: `feat(data): seed demo identities`
 
-- [x] **[DEV]** Implement `classifyThreat()` with explicit precedence and no probability values.  
-  Decision rules:
-  - Recent SIM change with supporting context -> `sim_channel_compromise`
-  - Phishing-relay indicator -> `phishing`
-  - No supported primary indicator -> `insufficient_evidence`
-  - If both primary indicators are present, return `insufficient_evidence` for the MVP rather than inventing conflict resolution
-  
-  Commit: `feat(engine): classify supported threats`
+- [ ] **[DATA]** Implement repositories for users, transactions, decisions, factor evaluations, challenges, and audit events.  
+  Commit: `feat(data): add persistence repositories`
 
-- [x] **[TEST]** Test each supported hypothesis, insufficient evidence, and conflicting primary indicators.  
-  Commit: `test(engine): cover threat classification`
+- [ ] **[API]** Add structured JSON error response middleware.  
+  Commit: `feat(api): add consistent error handling`
 
-### Factor evaluation
+- [ ] **[API]** Implement `GET /health` with database access check.  
+  Commit: `feat(api): add health endpoint`
 
-- [x] **[DEV]** Define SMS OTP and passkey factor metadata.  
-  Commit: `feat(policy): define factor registry`
-
-- [x] **[DEV]** Implement threat-compatibility evaluation.  
-  Commit: `feat(engine): evaluate threat compatibility`
-
-- [x] **[DEV]** Implement capability evaluation for passkey enrollment.  
-  Commit: `feat(engine): evaluate factor availability`
-
-- [x] **[DEV]** Implement assurance-threshold evaluation.  
-  Commit: `feat(engine): enforce assurance gate`
-
-- [x] **[DEV]** Ensure every factor receives exactly one final state and one reason object.  
-  State precedence:
-  1. `excluded` when threat-incompatible
-  2. `unavailable` when not user-completable
-  3. `excluded` when assurance is below threshold
-  4. `eligible` otherwise
-  
-  Commit: `feat(engine): finalize factor evaluation states`
-
-- [x] **[TEST]** Prove no threat-incompatible, unavailable, or below-assurance factor can be selected.  
-  Commit: `test(engine): enforce factor-selection invariants`
-
-### Outcome selection
-
-- [x] **[DEV]** Implement fixed preference selection among eligible factors.  
-  Commit: `feat(engine): select eligible factor`
-
-- [x] **[DEV]** Implement assisted-recovery fallback when no factor survives.  
-  Commit: `feat(engine): add assisted recovery outcome`
-
-- [x] **[DEV]** Compose the complete `evaluateScenario()` pure function.  
-  Commit: `feat(engine): compose policy decision kernel`
-
-- [x] **[TEST]** Test deep equality for repeated calls using identical input.  
-  Commit: `test(engine): verify deterministic output`
+- [ ] **[TEST]** Test migration, seed, repository round trip, foreign keys, and health endpoint.  
+  Commit: `test(data): verify database spine`
 
 ### Exit gate
 
-- [x] The kernel accepts a scenario and policy and returns a complete decision.
-- [x] The kernel has no React, storage, network, clock, random, or browser dependency.
-- [x] All kernel tests pass.
-- [x] No output contains a decimal probability.
-- [x] Conflicting or unsupported evidence produces `insufficient_evidence`.
+- [ ] Fresh database migration succeeds.
+- [ ] Seed is deterministic.
+- [ ] Health endpoint confirms database access.
+- [ ] Repository tests pass.
 
 ---
 
-## ☑ PHASE 2 - Complete the first vertical slice 🔴 BLOCKING
+## ☐ PHASE 2 - Decision engines 🔴 BLOCKING
 
-### SIM-swap scenario
+### Risk engine
 
-- [x] **[DEV]** Create the default SIM-swap fixture with synthetic indicators.  
-  Commit: `feat(scenario): add sim swap fixture`
+- [ ] **[ENGINE]** Define versioned risk policy with categorical thresholds and reason codes.  
+  Commit: `feat(engine): define risk policy`
 
-- [x] **[TEST]** Assert the SIM-swap fixture produces:
-  - same documented high risk,
-  - `sim_channel_compromise`,
-  - `high_support` or the policy's explicit support band,
-  - SMS OTP excluded,
-  - passkey eligible when enrolled,
-  - passkey selected.
-  
-  Commit: `test(scenario): lock sim swap outcome`
+- [ ] **[ENGINE]** Implement pure risk evaluation.  
+  Commit: `feat(engine): evaluate transaction risk`
 
-### Minimum user interface
+- [ ] **[TEST]** Cover low, medium, high, threshold boundary, and missing-signal cases.  
+  Commit: `test(engine): cover risk evaluation`
 
-- [x] **[DEV]** Build `AppShell` with product name, one-line value proposition, and synthetic-data disclosure.  
-  Commit: `feat(ui): add application shell`
+### Threat engine
 
-- [x] **[DEV]** Build a single `ScenarioPanel` using the SIM-swap output.  
-  Commit: `feat(ui): render scenario panel`
+- [ ] **[ENGINE]** Define narrow SIM-channel and phishing hypotheses.  
+  Commit: `feat(engine): define threat hypotheses`
 
-- [x] **[DEV]** Build evidence chips from `Decision.evidenceUsed`.  
-  Commit: `feat(ui): render observed evidence`
+- [ ] **[ENGINE]** Implement pure threat evaluation with support bands and evidence.  
+  Commit: `feat(engine): evaluate threat evidence`
 
-- [x] **[DEV]** Build the threat summary with hypothesis, support band, and `Do not trust` property.  
-  Commit: `feat(ui): render threat summary`
+- [ ] **[TEST]** Cover SIM change, phishing relay, insufficient evidence, and conflicting evidence.  
+  Commit: `test(engine): cover threat evaluation`
 
-- [x] **[DEV]** Build factor cards for SMS OTP and passkey.  
-  Commit: `feat(ui): render factor states`
+### Policy engine
 
-- [x] **[DEV]** Build the selected-factor outcome card.  
-  Commit: `feat(ui): render decision outcome`
+- [ ] **[ENGINE]** Define SMS OTP and passkey properties, assurance, enrollment requirements, and preference order.  
+  Commit: `feat(engine): define authentication factors`
 
-- [x] **[DEV]** Add passkey-enrollment toggle. The toggle changes scenario input only.  
-  Commit: `feat(ui): toggle passkey capability`
+- [ ] **[ENGINE]** Implement factor evaluation states: allowed, blocked, unavailable.  
+  Commit: `feat(engine): evaluate factor eligibility`
 
-- [x] **[TEST]** Toggle passkey off and verify:
-  - threat hypothesis does not change,
-  - passkey becomes unavailable,
-  - SMS remains excluded,
-  - assisted recovery becomes the outcome.
-  
-  Commit: `test(ui): verify capability fallback flow`
+- [ ] **[ENGINE]** Implement selected factor and assisted-recovery outcome.  
+  Commit: `feat(engine): select authentication outcome`
 
-- [x] **[DEV]** Add deterministic reset to the default enrolled state.  
-  Commit: `feat(ui): add demo reset`
+- [ ] **[TEST]** Prove blocked and unavailable factors can never be selected.  
+  Commit: `test(engine): enforce factor invariants`
+
+- [ ] **[ENGINE]** Implement fair scalar baseline as a separate pure function.  
+  Commit: `feat(engine): add scalar baseline`
+
+- [ ] **[TEST]** Prove baseline input excludes threat evidence.  
+  Commit: `test(engine): constrain baseline contract`
 
 ### Exit gate
 
-- [x] One complete end-to-end scenario works from fixture to visible outcome.
-- [x] The passkey toggle proves that availability does not override threat compatibility.
-- [x] Reset always restores the same state.
-- [x] No decision rule exists inside a React component.
+- [ ] Engines are deterministic pure functions.
+- [ ] No fake probability is returned.
+- [ ] Every output includes stable reason codes.
+- [ ] Equal-risk hero scenarios produce different threat traces.
+- [ ] All engine tests pass.
 
 ---
 
-## ☑ PHASE 3 - Build the hero comparison 🔴 BLOCKING
+## ☐ PHASE 3 - Decision API and audit 🔴 BLOCKING
 
-### Phishing scenario
+- [ ] **[API]** Implement request normalization and validation.  
+  Commit: `feat(api): normalize decision inputs`
 
-- [x] **[DEV]** Create the phishing-relay fixture with the same aggregate risk, required assurance, transaction amount, and payee sensitivity as the SIM-swap fixture.  
-  Commit: `feat(scenario): add phishing fixture`
+- [ ] **[API]** Implement `decisionService` orchestration.  
+  Commit: `feat(api): orchestrate authentication decision`
 
-- [x] **[TEST]** Assert the phishing fixture produces:
-  - `phishing`,
-  - phishing-specific evidence,
-  - SMS OTP excluded with a phishing-specific reason,
-  - passkey selected when enrolled.
-  
-  Commit: `test(scenario): lock phishing outcome`
+- [ ] **[DATA]** Persist transaction, signals, decision, factor evaluations, and audit events atomically.  
+  Commit: `feat(data): persist complete decision trace`
 
-### Comparison workspace
+- [ ] **[API]** Implement `POST /api/v1/decisions`.  
+  Commit: `feat(api): create decision endpoint`
 
-- [x] **[DEV]** Build `SharedRiskHeader` to make the shared risk and assurance requirement visually explicit.  
-  Commit: `feat(ui): show shared scalar risk`
+- [ ] **[API]** Implement `GET /api/v1/decisions/:decisionId`.  
+  Commit: `feat(api): retrieve persisted decision`
 
-- [x] **[DEV]** Build the two-column `ComparisonWorkspace`.  
-  Commit: `feat(ui): add side by side comparison`
+- [ ] **[API]** Implement `GET /api/v1/decisions/:decisionId/audit`.  
+  Commit: `feat(api): retrieve audit timeline`
 
-- [x] **[DEV]** Highlight only the evidence and exclusion rationale that differs between panels.  
-  Commit: `feat(ui): emphasize threat difference`
+- [ ] **[API]** Add idempotency handling for repeated client transaction IDs.  
+  Commit: `feat(api): protect duplicate transaction decisions`
 
-- [x] **[DEV]** Add a compact five-stage trace to each panel:
-  1. Observed
-  2. Suspected
-  3. Do not trust
-  4. Excluded
-  5. Decision
-  
-  Commit: `feat(ui): add five stage decision trace`
+- [ ] **[TEST]** API test: SIM-swap request blocks SMS and allows passkey.  
+  Commit: `test(api): verify sim swap decision`
 
-- [x] **[TEST]** Verify both scenarios show equal aggregate risk and distinct hypothesis-specific reasons.  
-  Commit: `test(ui): verify same risk comparison`
+- [ ] **[TEST]** API test: phishing request returns phishing-specific reasons.  
+  Commit: `test(api): verify phishing decision`
 
-### Fair scalar baseline
+- [ ] **[TEST]** API test: unenrolled passkey causes assisted recovery.  
+  Commit: `test(api): verify recovery fallback`
 
-- [x] **[DEV]** Implement a pure scalar baseline that accepts only risk and required assurance.  
-  Output for both scenarios: `phishing-resistant factor required`.
-  
-  Commit: `feat(engine): add fair scalar baseline`
-
-- [x] **[TEST]** Prove the baseline receives no threat indicators.  
-  Commit: `test(engine): constrain baseline inputs`
-
-- [x] **[DEV]** Render the baseline as a compact shared card, not as a competing full panel.  
-  Commit: `feat(ui): render scalar baseline`
+- [ ] **[TEST]** API test: decision is retrievable and audit order is stable.  
+  Commit: `test(api): verify persisted audit trace`
 
 ### Exit gate
 
-- [x] Default launch shows the full hero comparison.
-- [x] Same risk is visually obvious.
-- [x] Different evidence and exclusion reasons are visually obvious.
-- [x] The baseline is fair and does not intentionally select an unsafe method.
-- [x] A viewer can understand the core contrast without opening another screen.
+- [ ] A curl request creates a complete decision.
+- [ ] The response matches the frozen contract.
+- [ ] Database contains the transaction and audit trail.
+- [ ] Re-fetch returns the same decision.
+- [ ] Duplicate requests do not create conflicting records.
 
 ---
 
-## ☑ PHASE 4 - Harden the judged path 🔴 BLOCKING
+## ☐ PHASE 4 - Signal provider boundary 🔴 BLOCKING
 
-### Product integrity
+- [ ] **[API]** Define `SignalProvider` interface.  
+  Commit: `feat(api): define signal provider interface`
 
-- [x] **[DOCS]** Search UI copy for prohibited claims from Part 1.  
-  Commit: `docs: enforce prototype claim discipline`
+- [ ] **[API]** Implement deterministic mock telecom provider for recent SIM change.  
+  Commit: `feat(api): add mock telecom signals`
 
-- [x] **[DEV]** Add visible labels:
-  - `Synthetic indicators`
-  - `Deterministic demonstration policy`
-  - policy version
-  - `Authentication execution simulated` on the outcome card
-  
-  Commit: `feat(ui): disclose simulation boundaries`
+- [ ] **[API]** Implement deterministic mock device and geo provider.  
+  Commit: `feat(api): add mock device signals`
 
-- [x] **[TEST]** Verify no unsupported evidence creates a confident decision.  
-  Commit: `test: verify conservative unknown handling`
+- [ ] **[API]** Tag every provider result with source, observed time, and `synthetic: true`.  
+  Commit: `feat(api): preserve signal provenance`
 
-### UI resilience
+- [ ] **[API]** Permit explicit request signals to override mock provider values only in demo mode.  
+  Commit: `feat(api): add controlled demo overrides`
 
-- [x] **[DEV]** Add safe rendering for empty evidence, unknown reason code, and missing factor metadata.  
-  Commit: `fix(ui): add defensive decision rendering`
+- [ ] **[TEST]** Verify provider timeout or failure produces unknown signal, not fabricated safe data.  
+  Commit: `test(api): handle unavailable signal provider`
 
-- [x] **[DEV]** Ensure factor state is never communicated through color alone.  
-  Commit: `fix(ui): add accessible state labels`
-
-- [x] **[DEV]** Ensure the two-column layout becomes a readable single column on narrow screens.  
-  Commit: `style(ui): add responsive comparison layout`
-
-- [x] **[DEV]** Prevent long reason text from overflowing cards.  
-  Commit: `fix(ui): contain decision trace content`
-
-### Automated gate
-
-- [x] **[DEV]** Configure `npm run check` to run type-check, tests, and production build.  
-  Commit: `chore: add full project check`
-
-- [x] **[TEST]** Run `npm run check` from a clean checkout state.  
-  Commit: `test: pass full project check`
-
-- [x] **[TEST]** Verify the built application runs without a network connection.  
-  Commit: `test: verify offline demo path`
-
-### Manual smoke sequence
-
-- [x] Launch the app.
-- [x] Confirm both scenarios load with identical scalar risk.
-- [x] Confirm the hypotheses differ.
-- [x] Confirm SMS has a different exclusion reason in each panel.
-- [x] Confirm passkey is selected by default.
-- [x] Toggle passkey off on the SIM-swap panel.
-- [x] Confirm the hypothesis remains SIM-channel compromise.
-- [x] Confirm assisted recovery becomes the outcome.
-- [x] Reset.
-- [x] Confirm all default values return.
-- [x] Refresh.
-- [x] Confirm the deterministic default view returns.
+- [ ] **[DOCS]** Document where a real carrier, device-risk, IP-reputation, UPI, or Account Aggregator adapter would connect. Do not claim those integrations exist.  
+  Commit: `docs: document production signal seams`
 
 ### Exit gate
 
-- [x] `npm run check` passes.
-- [x] Manual smoke sequence passes without browser prompts or network calls.
-- [x] No prohibited claim appears in the UI.
-- [x] The entire judged path works using preset controls only.
+- [ ] Core decision service uses provider contracts rather than UI fixtures.
+- [ ] Every signal has visible provenance.
+- [ ] Provider failure is explicit.
+- [ ] No live external dependency exists on the demo path.
 
 ---
 
-## ☑ PHASE 5 - Demo polish 🔴 BLOCKING
+## ☐ PHASE 5 - Frontend integration 🔴 BLOCKING
 
-### Visual hierarchy
+### Transaction submission
 
-- [x] **[DEMO]** Make `SAME RISK` the first visual anchor.  
-  Commit: `style(ui): emphasize shared risk`
+- [ ] **[WEB]** Build transaction form with amount, payee type, device profile, session profile, and threat-signal controls.  
+  Commit: `feat(web): add transaction submission form`
 
-- [x] **[DEMO]** Make each differing threat indicator the second visual anchor.  
-  Commit: `style(ui): emphasize threat evidence`
+- [ ] **[WEB]** Load synthetic user and device presets from the backend.  
+  Commit: `feat(web): load demo identity presets`
 
-- [x] **[DEMO]** Make each excluded factor and reason the third visual anchor.  
-  Commit: `style(ui): emphasize factor exclusion`
+- [ ] **[WEB]** Submit to `POST /api/v1/decisions`; do not calculate decisions client-side.  
+  Commit: `feat(web): request backend decision`
 
-- [x] **[DEMO]** Make the final selected factor or assisted recovery outcome the strongest result state.  
-  Commit: `style(ui): emphasize policy outcome`
+- [ ] **[WEB]** Add loading, validation, backend unavailable, and invalid-response states.  
+  Commit: `feat(web): handle decision request states`
 
-- [x] **[DEMO]** Remove decorative elements that do not support the five-stage trace.  
-  Commit: `style(ui): remove nonessential decoration`
+### Decision visualization
 
-### Interaction polish
+- [ ] **[WEB]** Display risk level and exact risk reasons.  
+  Commit: `feat(web): display risk result`
 
-- [x] **[DEV]** Add small CSS transitions for state changes only. No animation library.  
-  Commit: `style(ui): add restrained state transitions`
+- [ ] **[WEB]** Display threat type, support band, and evidence.  
+  Commit: `feat(web): display threat result`
 
-- [x] **[DEV]** Keep all primary controls visible without a menu.  
-  Commit: `fix(ui): keep demo controls visible`
+- [ ] **[WEB]** Display factor cards for allowed, blocked, and unavailable factors.  
+  Commit: `feat(web): display factor eligibility`
 
-- [x] **[DEMO]** Verify all text is readable at presentation zoom and screen-recording resolution.  
-  Commit: `style(ui): tune presentation readability`
+- [ ] **[WEB]** Display selected factor or assisted recovery outcome.  
+  Commit: `feat(web): display policy outcome`
+
+- [ ] **[WEB]** Display policy version and synthetic-signal disclosure.  
+  Commit: `feat(web): disclose decision provenance`
+
+- [ ] **[WEB]** Retrieve and render the audit timeline from the audit endpoint.  
+  Commit: `feat(web): display persisted audit trail`
+
+### Hero comparison
+
+- [ ] **[WEB]** Add one-click presets for SIM-swap and phishing cases with the same amount and scalar-risk band.  
+  Commit: `feat(web): add hero transaction presets`
+
+- [ ] **[WEB]** Add a comparison mode that shows two backend-created decision IDs side by side.  
+  Commit: `feat(web): compare backend decisions`
+
+- [ ] **[WEB]** Show the fair scalar baseline as a shared result.  
+  Commit: `feat(web): display baseline comparison`
 
 ### Exit gate
 
-- [x] The default screen is presentation-ready.
-- [x] A screenshot communicates the core idea.
-- [x] The wow-moment toggle is visible and reliable.
-- [x] Polish has not introduced a new dependency or failure mode.
+- [ ] All visible decisions originate from API responses.
+- [ ] Browser refresh can retrieve a persisted decision by ID.
+- [ ] Hero scenarios are created through the backend.
+- [ ] Audit events are loaded from persistence.
+- [ ] The UI never implies mock providers are live integrations.
 
 ---
 
-## ☑ PHASE 6 - Documentation and submission readiness 🔴 BLOCKING
+## ☐ PHASE 6 - Executable factor adapter 🔴 BLOCKING
 
-### README
+### Adapter framework
 
-- [x] **[DOCS]** Write `README.md` with:
-  - product statement,
-  - problem,
-  - what the simulator demonstrates,
-  - explicit non-goals,
-  - prerequisites,
-  - install and run commands,
-  - test command,
-  - demo scenarios,
-  - architecture summary,
-  - claim limitations.
-  
-  Commit: `docs: add project readme`
+- [ ] **[AUTH]** Define factor-adapter interface for create challenge and verify.  
+  Commit: `feat(auth): define factor adapter contract`
 
-- [x] **[DOCS]** Ensure clone-to-run instructions fit in fewer than ten commands.  
-  Commit: `docs: simplify local runbook`
+- [ ] **[AUTH]** Implement simulated passkey adapter with explicit `SIMULATED` mode.  
+  Commit: `feat(auth): add simulated passkey adapter`
 
-### Demo script
+- [ ] **[DATA]** Persist challenges with expiry, consumed state, and decision reference.  
+  Commit: `feat(data): persist factor challenges`
 
-- [x] **[DOCS]** Write `docs/demo-script.md` using this sequence:
-  1. Ask whether equal risk should mean equal authentication.
-  2. Point to the shared high-risk score.
-  3. Reveal SIM-change evidence versus phishing-relay evidence.
-  4. Show the scalar baseline returns the same assurance requirement.
-  5. Follow both five-stage traces.
-  6. Explain why SMS is excluded for different reasons.
-  7. Toggle passkey enrollment off.
-  8. Show that the engine chooses assisted recovery instead of unsafe fallback.
-  9. Close with the tagline and product boundary.
-  
-  Commit: `docs: add final demo script`
+- [ ] **[API]** Implement challenge creation endpoint.  
+  Commit: `feat(api): create factor challenge`
 
-- [x] **[DEMO]** Ensure every statement in the script is visible in the product or explicitly framed as a product-boundary explanation.  
-  Commit: `docs: align demo claims with product`
+- [ ] **[API]** Implement challenge verification endpoint.  
+  Commit: `feat(api): verify factor challenge`
 
-### Submission evidence
+- [ ] **[API]** Reject challenge creation for blocked or unavailable factors.  
+  Commit: `fix(auth): enforce selected factor policy`
 
-- [x] **[DOCS]** Add final screenshots or recording link placeholders to the README.  
-  Commit: `docs: add demo evidence section`
+- [ ] **[API]** Reject expired and replayed challenges.  
+  Commit: `fix(auth): prevent challenge replay`
 
-- [x] **[DOCS]** Complete `DECISIONS.md` with all scope cuts made during implementation.  
-  Commit: `docs: finalize engineering decisions`
+- [ ] **[DATA]** Append challenge creation and verification audit events.  
+  Commit: `feat(data): audit factor execution`
 
-- [x] **[TEST]** Scan tracked files and Git history for secrets or accidental `.env` content.  
+- [ ] **[WEB]** Add `Continue with passkey` action for the selected factor.  
+  Commit: `feat(web): launch selected factor challenge`
+
+- [ ] **[WEB]** Clearly label simulated factor execution.  
+  Commit: `feat(web): disclose simulated authentication`
+
+- [ ] **[TEST]** Test allowed challenge, blocked-factor rejection, expiry, replay, and transaction-state update.  
+  Commit: `test(auth): cover challenge lifecycle`
+
+### Exit gate
+
+- [ ] The selected factor can execute through an adapter.
+- [ ] The backend prevents bypassing policy through direct API calls.
+- [ ] Challenge state is persisted and replay-safe.
+- [ ] The UI explicitly labels simulation.
+
+---
+
+## ☐ PHASE 7 - Real WebAuthn 🟡 STRETCH
+
+Attempt only when Phases 0 through 6 pass and the full fallback demo is stable.
+
+- [ ] **[AUTH]** Add WebAuthn credential table containing public credential data only.  
+  Commit: `feat(auth): add webauthn credential storage`
+
+- [ ] **[AUTH]** Add registration-options and registration-verification endpoints.  
+  Commit: `feat(auth): add passkey registration`
+
+- [ ] **[AUTH]** Add authentication-options and authentication-verification through the factor adapter.  
+  Commit: `feat(auth): add passkey authentication`
+
+- [ ] **[AUTH]** Bind server challenge state to decision ID, transaction ID, and expiry.  
+  Commit: `feat(auth): bind passkey challenge to decision`
+
+- [ ] **[TEST]** Verify origin, relying-party ID, expiry, consumed challenge, and credential ownership.  
+  Commit: `test(auth): validate webauthn ceremony`
+
+- [ ] **[WEB]** Add passkey enrollment for the synthetic demo user.  
+  Commit: `feat(web): enroll demo passkey`
+
+- [ ] **[WEB]** Add real passkey authentication with automatic fallback to the labeled simulated adapter only in demo mode.  
+  Commit: `feat(web): execute passkey challenge`
+
+- ✂ KILL real WebAuthn if it requires changing the demo host, browser profile, or critical-path API contracts.
+- ✂ KILL real WebAuthn if registration or authentication is not stable on the exact presentation environment.
+- ✂ KILL real WebAuthn if fallback labeling becomes ambiguous.
+
+### Exit gate
+
+- [ ] Registration and authentication work on the exact demo origin.
+- [ ] Credentials persist for the presentation profile.
+- [ ] Failure cannot break the decision or audit demo.
+- [ ] Simulated adapter remains a clearly labeled fallback.
+
+---
+
+## ☐ PHASE 8 - Security and reliability hardening 🔴 BLOCKING
+
+- [ ] **[API]** Add payload size limits.  
+  Commit: `fix(api): limit request payloads`
+
+- [ ] **[API]** Add basic rate limiting to decision and challenge endpoints.  
+  Commit: `fix(api): rate limit critical endpoints`
+
+- [ ] **[API]** Restrict CORS to the configured frontend origin.  
+  Commit: `fix(api): restrict cors origin`
+
+- [ ] **[API]** Add correlation ID to request logs and error responses.  
+  Commit: `feat(api): add request correlation ids`
+
+- [ ] **[API]** Ensure logs exclude raw credentials, challenge secrets, and unnecessary personal data.  
+  Commit: `fix(api): redact sensitive logs`
+
+- [ ] **[DATA]** Verify all multi-write decision and verification flows use database transactions.  
+  Commit: `fix(data): enforce atomic state changes`
+
+- [ ] **[TEST]** Test malformed payload, unknown user, unknown device, duplicate transaction, missing signal, provider failure, blocked factor, expired challenge, and replay.  
+  Commit: `test: cover critical failure paths`
+
+- [ ] **[TEST]** Configure `npm run check` to run type-check, tests, and builds for all packages.  
+  Commit: `chore: add full stack quality gate`
+
+- [ ] **[TEST]** Add smoke script that resets demo data, creates both decisions, retrieves audits, executes the simulated passkey, and prints PASS or FAIL.  
+  Commit: `test: add end to end smoke script`
+
+### Exit gate
+
+- [ ] Full check passes.
+- [ ] Smoke script passes from a fresh demo database.
+- [ ] Direct requests cannot challenge blocked factors.
+- [ ] Replays and expired challenges fail.
+- [ ] Logs are useful without exposing secrets.
+
+---
+
+## ☐ PHASE 9 - Demo experience and polish 🔴 BLOCKING
+
+- [ ] **[DEMO]** Default landing view explains the product in one sentence.  
+  Commit: `style(web): clarify product value`
+
+- [ ] **[DEMO]** Make `same risk` the first comparison anchor.  
+  Commit: `style(web): emphasize shared risk`
+
+- [ ] **[DEMO]** Make signal provenance and synthetic labels visible but not dominant.  
+  Commit: `style(web): clarify signal provenance`
+
+- [ ] **[DEMO]** Make blocked-factor reasons the main visual proof.  
+  Commit: `style(web): emphasize factor decisions`
+
+- [ ] **[DEMO]** Make persisted audit events readable as a compact timeline.  
+  Commit: `style(web): polish audit timeline`
+
+- [ ] **[DEMO]** Add a visible API-response inspector or copy-JSON action.  
+  Commit: `feat(web): expose machine readable decision`
+
+- [ ] **[DEMO]** Add one-click demo reset backed by the API.  
+  Commit: `feat(web): reset deterministic demo data`
+
+- [ ] **[DEMO]** Remove decorative panels without demo value.  
+  Commit: `style(web): remove visual noise`
+
+- [ ] **[TEST]** Verify the complete flow without editing query strings, database rows, or source code.  
+  Commit: `test: verify judge facing demo path`
+
+### Exit gate
+
+- [ ] A judge can see that the backend returned the decision.
+- [ ] A judge can see that the decision was persisted.
+- [ ] A judge can see why each factor was allowed or blocked.
+- [ ] A judge can execute the selected factor through an adapter.
+- [ ] Reset restores deterministic state.
+
+---
+
+## ☐ PHASE 10 - Documentation and submission 🔴 BLOCKING
+
+- [ ] **[DOCS]** Update `README.md` with product, architecture, data flow, setup, API, demo, limitations, and security boundaries.  
+  Commit: `docs: write full stack project readme`
+
+- [ ] **[DOCS]** Add architecture diagram showing client, API, engines, providers, factors, and SQLite.  
+  Commit: `docs: add system architecture diagram`
+
+- [ ] **[DOCS]** Document every mock provider and the real production seam it represents.  
+  Commit: `docs: document integration boundaries`
+
+- [ ] **[DOCS]** Complete `DECISIONS.md` with rejected Redis, microservices, live APIs, and unsupported AI claims.  
+  Commit: `docs: finalize architecture decisions`
+
+- [ ] **[DOCS]** Write `docs/demo-script.md`.  
+  Commit: `docs: add final product demo script`
+
+- [ ] **[TEST]** Verify clone-to-run instructions on a clean environment.  
+  Commit: `test: verify setup runbook`
+
+- [ ] **[TEST]** Scan tracked files and Git history for secrets.  
   Commit: `chore: complete secrets review`
 
+- [ ] **[DEMO]** Capture one backup recording after smoke passes.  
+  Commit: `docs: add demo recording reference`
+
 ### Exit gate
 
-- [x] A new reviewer can understand the product boundary from the README.
-- [x] The demo script matches the shipped UI exactly.
-- [x] All major cuts have a recorded reason.
-- [x] No secrets or external credentials are required.
+- [ ] README makes the backend product boundary obvious.
+- [ ] API examples match the implementation.
+- [ ] Mock versus real boundaries are explicit.
+- [ ] Demo script matches the shipped product.
+- [ ] No secret or credential is committed.
 
 ---
 
-# PART 4 - Optional features
+# PART 8 - Demo script skeleton
 
-Do not begin this section until every Phase 0 to Phase 6 exit gate passes.
+## Opening hook
 
-## ☐ OPTIONAL A - Export decision JSON 🟡 OPTIONAL
+> A high-risk score can tell a bank to add authentication. It cannot tell the bank whether the authentication channel itself is compromised.
 
-- [x] **[DEV]** Add a copy or download action for the current `Decision` object.  
-  Commit: `feat(ui): export decision json`
+## Flow
 
-- [x] **[TEST]** Verify export exactly matches the engine output and contains no UI-only fields.  
-  Commit: `test(ui): verify decision export`
+1. Submit a ₹50,000 synthetic transaction through the React client.
+2. Show that the request reaches `POST /api/v1/decisions`.
+3. Display the backend response: high risk, SIM-channel-compromise hypothesis, passkey allowed, SMS OTP blocked.
+4. Open the audit timeline and show the persisted reasons and policy version.
+5. Create the phishing scenario with the same risk level.
+6. Compare both backend decision IDs side by side.
+7. Show that the scalar baseline returns the same high-level requirement while threat-aware reasons differ.
+8. Attempt to create an SMS challenge and show the backend rejects the blocked factor.
+9. Continue with the selected passkey adapter.
+10. Show challenge verification and the authorization audit event.
+11. Disable passkey enrollment and rerun the transaction.
+12. Show assisted recovery rather than unsafe SMS fallback.
 
-- ✂ KILL if browser download behavior distracts from the primary demo.
+## Wow moment
 
-## ☐ OPTIONAL B - Customer outcome preview 🟡 OPTIONAL
+The strongest moment is not a chart. It is a direct API enforcement proof:
 
-- [x] **[DEV]** Add a compact preview labeled `Simulated customer message`.  
-  Commit: `feat(ui): add simulated customer outcome`
+```text
+POST /api/v1/challenges
+factor = SMS_OTP
 
-- [x] **[TEST]** Ensure it displays only:
-  - `Use your passkey to authorize this payment`, or
-  - `Payment paused. Continue through assisted recovery.`
-  
-  Commit: `test(ui): verify customer outcome copy`
+-> rejected because the persisted policy decision blocked the channel
+```
 
-- ✂ KILL if it looks like authentication is actually being executed.
+Then execute the selected passkey adapter successfully.
 
-## ☐ OPTIONAL C - Keyboard demo controls 🟡 OPTIONAL
+## Closing
 
-- [x] **[DEV]** Add shortcuts for reset and passkey toggle only if discoverability remains clear.  
-  Commit: `feat(ui): add demo keyboard controls`
-
-- ✂ KILL if shortcuts create accidental state changes during recording.
+> This is not a static risk dashboard. It is an integration-ready decision service: signals enter through an API, policy is enforced on the server, factor challenges cannot bypass the decision, and every result is auditable.
 
 ---
 
-# PART 5 - Final definition of done
+# PART 9 - Kill criteria and cut order
 
-The project is submitted only when every item below is true.
+## Immediate kill criteria
+
+- ✂ Remove Redis if proposed.
+- ✂ Remove microservice separation if proposed.
+- ✂ Remove live carrier, UPI, Account Aggregator, device-intelligence, or IP-reputation integrations if credentials, approvals, or unstable networks are required.
+- ✂ Remove real SMS delivery. Never send an actual OTP for this prototype.
+- ✂ Remove real WebAuthn before weakening the API, decision, persistence, or audit path.
+- ✂ Remove user login before weakening factor-policy enforcement.
+- ✂ Remove dashboard analytics before weakening the transaction decision flow.
+- ✂ Remove extra threat classes before weakening the two hero scenarios.
+- ✂ Remove rich device fingerprinting before weakening signal provenance.
+- ✂ Remove deployment automation before weakening local reproducibility.
+
+## Cut order if the build slips
+
+1. Real WebAuthn
+2. JSON inspector polish
+3. Side-by-side comparison layout; retain sequential scenario history
+4. Device and session preset editor; retain two fixed presets from the backend
+5. Baseline visualization; retain baseline output in API or demo narration
+6. CSS transitions
+7. Audit filtering; retain ordered audit list
+
+## Never cut
+
+- Backend decision endpoint
+- Runtime request validation
+- Pure risk, threat, and policy engines
+- SQLite persistence
+- Factor-level allowed, blocked, and unavailable decisions
+- Audit event storage and retrieval
+- Backend rejection of blocked-factor challenge creation
+- Simulated passkey adapter
+- Two API-driven hero scenarios
+- Synthetic-signal disclosure
+- Automated smoke test
+
+---
+
+# PART 10 - Definition of done
 
 ## Product
 
-- [x] One screen presents the complete core comparison.
-- [x] Two scenarios share the same aggregate risk and required assurance.
-- [x] The scenarios derive different supported threat hypotheses.
-- [x] SMS OTP is excluded with a scenario-specific reason in both cases.
-- [x] Passkey is selected only when compatible, enrolled, and above the assurance threshold.
-- [x] Removing passkey enrollment produces assisted recovery, not unsafe fallback.
-- [x] Unsupported or conflicting evidence produces insufficient evidence.
+- [ ] React submits a transaction to the backend.
+- [ ] Backend returns risk, threat, allowed factors, blocked factors, selected factor, action, reasons, and policy version.
+- [ ] SIM-change scenario blocks SMS OTP.
+- [ ] Phishing scenario blocks SMS OTP for its own documented reason.
+- [ ] Passkey is selected only when enrolled and policy-eligible.
+- [ ] No surviving factor produces assisted recovery.
+- [ ] Frontend retrieves a persisted decision and audit timeline.
 
-## Engineering
+## Backend
 
-- [x] The decision engine is pure and deterministic.
-- [x] UI components contain no duplicated policy logic.
-- [x] Policy and scenarios are committed fixtures.
-- [x] Every factor has exactly one state and one reason object.
-- [x] Tests cover hero scenarios, fallback, unknown evidence, invariant enforcement, and determinism.
-- [x] `npm run check` passes.
-- [x] Production build works offline.
+- [ ] Input and output contracts are runtime-validated.
+- [ ] Risk, threat, and policy engines are pure and unit-tested.
+- [ ] Decision creation is atomic.
+- [ ] Duplicate client transaction handling is defined and tested.
+- [ ] Health endpoint verifies database availability.
+- [ ] Provider provenance is persisted.
+
+## Authentication enforcement
+
+- [ ] A blocked factor cannot create a challenge.
+- [ ] An unavailable factor cannot create a challenge.
+- [ ] An allowed selected factor can create a challenge.
+- [ ] Expired or consumed challenge verification fails.
+- [ ] Successful verification updates transaction state and audit log.
+- [ ] Simulated execution is clearly labeled.
 
 ## Demo
 
-- [x] The core contrast is visible without navigation.
-- [x] Synthetic inputs and simulated execution are disclosed.
-- [x] The scalar baseline is fair.
-- [x] The passkey toggle produces the wow moment reliably.
-- [x] Reset returns the exact default state.
-- [x] No authentication prompt, permission prompt, login, loading wait, or network request appears.
-- [x] The 2 to 3 minute script matches the shipped product.
+- [ ] Same-risk hero scenarios are available as one-click presets.
+- [ ] Backend response is visible.
+- [ ] Audit persistence is visible.
+- [ ] SMS challenge rejection is visible.
+- [ ] Selected factor execution is visible.
+- [ ] Passkey-unavailable recovery path is visible.
+- [ ] Demo reset is deterministic.
+- [ ] No external API or network dependency can break the core flow.
 
 ## Integrity
 
-- [x] No fake probabilities are shown.
-- [x] No AI, fraud-detection, compliance, authentication-execution, or production-readiness overclaim appears.
-- [x] No secrets exist in tracked files or Git history.
-- [x] The README clearly states what the prototype does not do.
+- [ ] No calibrated-probability claim appears.
+- [ ] No live-provider claim appears.
+- [ ] No compliance or production-readiness claim appears.
+- [ ] No real payment or real customer data is used.
+- [ ] No secrets exist in the repository or history.
 
-## Submission package
+## Quality gate
 
-- [x] `docs/PRD.md`
-- [x] `docs/EXECUTION.md`
-- [x] `docs/DECISIONS.md`
-- [x] `docs/demo-script.md`
-- [x] `README.md`
-- [x] Tested production build
-- [x] Demo recording or live-demo-ready local build
+- [ ] `npm run check` passes.
+- [ ] End-to-end smoke script passes on a fresh database.
+- [ ] README setup steps work.
+- [ ] Demo script matches the shipped interface and API.
+- [ ] Backup recording exists.
 
 ---
 
-# PART 6 - Critical-path cheat sheet
+# PART 11 - Critical path
 
 ```text
 Contracts
-  -> Policy kernel
-  -> Kernel tests
-  -> SIM-swap vertical slice
-  -> Passkey-unavailable fallback
-  -> Phishing comparison
-  -> Fair scalar baseline
-  -> Five-stage traces
-  -> Full project check
-  -> Visual polish
-  -> README and demo script
-  -> Final smoke and submission
+  -> SQLite schema
+  -> repositories
+  -> pure decision engines
+  -> POST /decisions
+  -> persisted audit trail
+  -> React transaction submission
+  -> decision visualization
+  -> factor adapter
+  -> blocked-factor enforcement
+  -> end-to-end smoke
+  -> demo polish
+  -> real WebAuthn only if everything above is stable
 ```
-
-If the build slips, cut in this order:
-
-1. Keyboard controls
-2. Customer outcome preview
-3. Decision JSON export
-4. CSS transitions
-5. Any decorative content outside the five-stage trace
-
-Never cut:
-
-- Pure decision engine
-- Two same-risk scenarios
-- Scenario-specific factor exclusion
-- Capability toggle and assisted-recovery fallback
-- Fair scalar baseline
-- Deterministic tests
-- Synthetic-data disclosure
-- Claim discipline
 
 ---
 
 # Final implementation rule
 
-Before adding anything, ask:
+Before adding a component, endpoint, table, provider, or dependency, ask:
 
-> Does this make the evidence-to-exclusion decision clearer, safer, or more reliable in the demo?
+> Does this make the service more convincingly deployable, more enforceable, or more impressive in the judged flow?
 
-If not, do not build it.
+If it does not strengthen the API decision, persistence, factor enforcement, audit evidence, or demo reliability, do not build it.
