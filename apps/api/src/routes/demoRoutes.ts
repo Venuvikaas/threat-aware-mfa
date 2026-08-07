@@ -1,5 +1,5 @@
 /**
- * Demo routes (docs/EXECUTION.md Phase 5/9).
+ * Demo routes (docs/EXECUTION_new.md Phase 5/9/7).
  *
  * GET  /api/v1/demo/users                      synthetic identity presets
  * GET  /api/v1/demo/baseline                   fair scalar baseline (risk only)
@@ -16,6 +16,7 @@ import {
   validationError,
 } from "../middleware/errorHandler.js";
 import { DeviceRepository } from "../repositories/deviceRepository.js";
+import { PasskeyCredentialRepository } from "../repositories/passkeyRepository.js";
 import { UserRepository } from "../repositories/userRepository.js";
 
 export function createDemoRoutes(deps: { db: Db; demoMode: boolean }): Router {
@@ -24,6 +25,7 @@ export function createDemoRoutes(deps: { db: Db; demoMode: boolean }): Router {
   router.get("/users", (_req, res) => {
     const users = new UserRepository(deps.db);
     const devices = new DeviceRepository(deps.db);
+    const passkeys = new PasskeyCredentialRepository(deps.db);
     const rows = users.all();
     res.json({
       users: rows.map((u) => ({
@@ -31,6 +33,12 @@ export function createDemoRoutes(deps: { db: Db; demoMode: boolean }): Router {
         name: u.name,
         passkeyEnrolled: u.passkeyEnrolled,
         devices: devices.findByUserId(u.id),
+        // Real WebAuthn credentials (public data only) — drives the demo
+        // choice between a real ceremony and the labeled simulated fallback.
+        passkeys: passkeys.findByUserId(u.id).map((c) => ({
+          id: c.id,
+          createdAt: c.createdAt,
+        })),
       })),
     });
   });
@@ -78,6 +86,8 @@ export function createDemoRoutes(deps: { db: Db; demoMode: boolean }): Router {
           DELETE FROM decisions;
           DELETE FROM signals;
           DELETE FROM transactions;
+          DELETE FROM passkey_registrations;
+          DELETE FROM passkey_credentials;
         `);
       });
       reset();
