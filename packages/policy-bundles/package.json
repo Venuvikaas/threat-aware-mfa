@@ -1,9 +1,9 @@
 {
-  "name": "@mfa/demo-data",
+  "name": "@mfa/policy-bundles",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Deterministic synthetic demo fixtures and judge presets",
+  "description": "Immutable declarative policy bundles: versioned rules, factor catalog, and content hashing",
   "exports": {
     ".": "./src/index.ts"
   },

@@ -20,6 +20,7 @@
     "paths": {
       "@mfa/contracts": ["packages/contracts/src/index.ts"],
       "@mfa/decision-core": ["packages/decision-core/src/index.ts"],
+      "@mfa/policy-bundles": ["packages/policy-bundles/src/index.ts"],
       "@mfa/demo-data": ["packages/demo-data/src/index.ts"]
     }
   },

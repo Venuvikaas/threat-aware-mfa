@@ -10,6 +10,9 @@ export default defineConfig({
       "@mfa/decision-core": fileURLToPath(
         new URL("./packages/decision-core/src/index.ts", import.meta.url)
       ),
+      "@mfa/policy-bundles": fileURLToPath(
+        new URL("./packages/policy-bundles/src/index.ts", import.meta.url)
+      ),
       "@mfa/demo-data": fileURLToPath(
         new URL("./packages/demo-data/src/index.ts", import.meta.url)
       ),
