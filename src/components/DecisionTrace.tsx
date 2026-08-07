@@ -10,6 +10,12 @@ interface DecisionTraceProps {
 
 const STAGES = ["Observed", "Suspected", "Do not trust", "Excluded", "Decision"] as const;
 
+const PRIMARY_EVIDENCE: Record<Decision["hypothesis"], string | undefined> = {
+  sim_channel_compromise: "Recent SIM change",
+  phishing: "Phishing relay indicator",
+  insufficient_evidence: undefined,
+};
+
 export function DecisionTrace({ decision }: DecisionTraceProps) {
   const nonEligible = decision.factors.filter((f) => f.state !== "eligible");
   const eligible = decision.factors.filter((f) => f.state === "eligible");
@@ -20,7 +26,10 @@ export function DecisionTrace({ decision }: DecisionTraceProps) {
         <span className="trace-step-number">1</span>
         <div>
           <h3 className="trace-step-title">{STAGES[0]}</h3>
-          <EvidenceList evidence={decision.evidenceUsed} />
+          <EvidenceList
+            evidence={decision.evidenceUsed}
+            primary={PRIMARY_EVIDENCE[decision.hypothesis]}
+          />
         </div>
       </div>
 
