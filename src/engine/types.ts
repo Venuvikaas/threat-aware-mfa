@@ -72,34 +72,55 @@ export interface Decision {
   outcomeMessage: string;
 }
 
-/**
- * Static policy fixture contract. Contains evidence-to-hypothesis rules,
- * threat compatibility, the assurance gate, availability requirements,
- * and the fixed preference order. Implementation lives in src/policy/.
- */
-export interface Policy {
-  version: string;
-  requiredAssurance: number;
-  rule: {
-    simChangeHypothesis: ThreatHypothesis;
-    simChangeSupportBand: SupportBand;
-    simChangeDoNotTrust: string[];
-    phishingHypothesis: ThreatHypothesis;
-    phishingSupportBand: SupportBand;
-    phishingDoNotTrust: string[];
-    insufficientEvidenceSupportBand: SupportBand;
-  };
-  factors: FactorPolicy[];
-  preferenceOrder: FactorId[];
+/** A stable reason code plus copy-safe human-readable explanation. */
+export interface FactorReason {
+  reasonCode: string;
+  reason: string;
 }
 
+/** Copy and metadata for one supported hypothesis class. */
+export interface ThreatRule {
+  supportBand: SupportBand;
+  doNotTrust: string[];
+  reasonCode: string;
+  reason: string;
+}
+
+/**
+ * One factor's policy definition. All copy is committed fixture text;
+ * the engine never invents prose.
+ */
 export interface FactorPolicy {
   factorId: FactorId;
   displayName: string;
   assurance: number;
   incompatibleWith: ThreatHypothesis[];
-  excludedReasonCode: string;
-  excludedReason: string;
-  unavailableReasonCode: string;
-  unavailableReason: string;
+  /** Per-hypothesis exclusion reason; only present for incompatible hypotheses. */
+  excludedReasonByHypothesis: Partial<Record<ThreatHypothesis, FactorReason>>;
+  /** Capability gate; `passkey_enrolled` is the only gate in the demo policy. */
+  availabilityRequirement: "passkey_enrolled" | "none";
+  unavailableReason: FactorReason;
+  /** Reason shown when assurance is below the scenario threshold. */
+  assuranceBelowReason: FactorReason;
+  eligibleReason: FactorReason;
+  /** Copy shown when this factor is the selected outcome. */
+  selectionMessage: string;
+}
+
+/**
+ * Static policy fixture contract. Contains evidence-to-hypothesis rules,
+ * threat compatibility, factor availability requirements, and the fixed
+ * preference order. Implementation lives in src/policy/.
+ */
+export interface Policy {
+  version: string;
+  threats: {
+    simChannelCompromise: ThreatRule;
+    phishing: ThreatRule;
+    insufficientEvidence: ThreatRule;
+  };
+  factors: FactorPolicy[];
+  /** Lowest-friction-first among eligible factors. */
+  preferenceOrder: FactorId[];
+  assistedRecoveryMessage: string;
 }
