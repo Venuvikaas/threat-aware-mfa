@@ -1,165 +1,40 @@
 /**
- * Frozen API contracts for the Threat-Aware MFA Decision Service.
+ * Frozen wire contracts for the Threat-Aware Authentication Decision Service
+ * (EXECUTION_new2.md §5).
  *
- * These types and Zod schemas are the single source of truth for the wire
- * contract between apps/api and apps/web. They are frozen at Phase 0 and any
- * change must be deliberate (docs/EXECUTION.md PART 3).
- *
- * Every interface below mirrors the frozen contract exactly; the Zod schemas
- * are derived from the same shapes so runtime validation and static typing
- * cannot drift apart.
+ * Split by domain: evidence, threats, trust, factors, policy, trace,
+ * decisions, replay. Runtime validation and static types share one source of
+ * truth and cannot drift apart.
  */
 import { z } from "zod";
 
-/* ------------------------------------------------------------------ */
-/* Vocabulary                                                          */
-/* ------------------------------------------------------------------ */
-
-export const RISK_LEVELS = ["LOW", "MEDIUM", "HIGH"] as const;
-export type RiskLevel = (typeof RISK_LEVELS)[number];
-
-export const THREAT_TYPES = [
-  "SIM_CHANNEL_COMPROMISE",
-  "PHISHING",
-  "INSUFFICIENT_EVIDENCE",
-] as const;
-export type ThreatType = (typeof THREAT_TYPES)[number];
-
-export const THREAT_SUPPORT = ["HIGH", "MODERATE", "INSUFFICIENT"] as const;
-export type ThreatSupport = (typeof THREAT_SUPPORT)[number];
-
-export const FACTOR_IDS = ["PASSKEY", "SMS_OTP"] as const;
-export type FactorId = (typeof FACTOR_IDS)[number];
-
-export const FACTOR_STATUSES = ["ALLOWED", "BLOCKED", "UNAVAILABLE"] as const;
-export type FactorStatus = (typeof FACTOR_STATUSES)[number];
-
-export const DECISION_ACTIONS = [
-  "ALLOW_WITH_FACTOR",
-  "REFER_TO_ASSISTED_RECOVERY",
-] as const;
-export type DecisionAction = (typeof DECISION_ACTIONS)[number];
-
-export const CHALLENGE_MODES = ["SIMULATED", "WEBAUTHN"] as const;
-export type ChallengeMode = (typeof CHALLENGE_MODES)[number];
-
-export const TRANSACTION_STATUSES = [
-  "AUTHORIZED",
-  "DENIED",
-  "PENDING_RECOVERY",
-] as const;
-export type TransactionStatus = (typeof TRANSACTION_STATUSES)[number];
-
-export const AUDIT_EVENT_TYPES = [
-  "DECISION_CREATED",
-  "FACTOR_BLOCKED",
-  "FACTOR_SELECTED",
-  "CHALLENGE_CREATED",
-  "CHALLENGE_VERIFIED",
-  "RECOVERY_REQUIRED",
-] as const;
-export type AuditEventType = (typeof AUDIT_EVENT_TYPES)[number];
+export * from "./evidence.js";
+export * from "./threats.js";
+export * from "./trust.js";
+export * from "./factors.js";
+export * from "./capabilities.js";
+export * from "./policy.js";
+export * from "./trace.js";
+export * from "./decisions.js";
+export * from "./replay.js";
 
 /* ------------------------------------------------------------------ */
-/* Numeric sanity caps (Phase 8 hardening).                            */
-/* ------------------------------------------------------------------ */
-
-/** ₹100 crore in minor units — a generous ceiling for demo transactions. */
-export const MAX_AMOUNT_MINOR = 100_000_000_00;
-/** One year in seconds — a session cannot plausibly be older. */
-export const MAX_SESSION_AGE_SECONDS = 31_536_000;
-/** A demo user cannot plausibly accumulate more failed logins than this. */
-export const MAX_FAILED_LOGIN_COUNT = 1000;
-/** A login distance cannot exceed the earth's circumference. */
-export const MAX_GEO_DISTANCE_KM = 40_075;
-
-/* ------------------------------------------------------------------ */
-/* Decision request / response                                        */
-/* ------------------------------------------------------------------ */
-
-export const zCurrency = z.literal("INR");
-
-export const zCreateDecisionRequest = z.object({
-  userId: z.string().min(1),
-  transaction: z.object({
-    clientTransactionId: z.string().min(1),
-    amountMinor: z.number().int().nonnegative().max(MAX_AMOUNT_MINOR),
-    currency: zCurrency,
-    payeeId: z.string().min(1),
-    payeeIsKnown: z.boolean(),
-  }),
-  session: z.object({
-    sessionId: z.string().min(1),
-    ageSeconds: z.number().nonnegative().max(MAX_SESSION_AGE_SECONDS),
-    failedLoginCount: z.number().int().nonnegative().max(MAX_FAILED_LOGIN_COUNT),
-    ipAddress: z.string().min(1),
-    asn: z.string().min(1),
-    country: z.string().min(1),
-  }),
-  device: z.object({
-    deviceId: z.string().min(1),
-    trusted: z.boolean(),
-    firstSeen: z.boolean(),
-    browserFingerprint: z.string().min(1),
-  }),
-  signals: z.object({
-    recentSimChange: z.boolean().nullable(),
-    geoDistanceFromLastLoginKm: z
-      .number()
-      .nonnegative()
-      .max(MAX_GEO_DISTANCE_KM)
-      .nullable(),
-    phishingRelayIndicator: z.boolean(),
-  }),
-});
-export type CreateDecisionRequest = z.infer<typeof zCreateDecisionRequest>;
-
-export const zFactorDecision = z.object({
-  factor: z.enum(FACTOR_IDS),
-  status: z.enum(FACTOR_STATUSES),
-  reasonCode: z.string().min(1),
-  reason: z.string().min(1),
-});
-export type FactorDecision = z.infer<typeof zFactorDecision>;
-
-export const zCreateDecisionResponse = z.object({
-  decisionId: z.string().min(1),
-  transactionId: z.string().min(1),
-  policyVersion: z.string().min(1),
-  risk: z.object({
-    level: z.enum(RISK_LEVELS),
-    reasons: z.array(z.string().min(1)),
-  }),
-  threat: z.object({
-    type: z.enum(THREAT_TYPES),
-    support: z.enum(THREAT_SUPPORT),
-    evidence: z.array(z.string().min(1)),
-  }),
-  factors: z.array(zFactorDecision),
-  allowedFactors: z.array(z.enum(FACTOR_IDS)),
-  blockedFactors: z.array(z.enum(FACTOR_IDS)),
-  selectedFactor: z.enum(FACTOR_IDS).nullable(),
-  action: z.enum(DECISION_ACTIONS),
-  createdAt: z.string().min(1),
-});
-export type CreateDecisionResponse = z.infer<typeof zCreateDecisionResponse>;
-
-/* ------------------------------------------------------------------ */
-/* Factor challenge                                                    */
+/* Factor challenge (Phase 4; shape carried over from the prior build) */
 /* ------------------------------------------------------------------ */
 
 export const zCreateChallengeRequest = z.object({
   decisionId: z.string().min(1),
   factor: z.enum(FACTOR_IDS),
   /**
-   * Demo-only hint (Phase 7): create the labeled SIMULATED challenge even
-   * when a real WebAuthn ceremony would be possible. Additive and optional;
-   * the server still enforces factor policy and the response contract is
-   * unchanged. Rejected outside demo mode.
+   * Demo-only hint: create the labeled SIMULATED challenge even when a real
+   * WebAuthn ceremony would be possible. Rejected outside demo mode.
    */
   preferSimulated: z.boolean().optional(),
 });
 export type CreateChallengeRequest = z.infer<typeof zCreateChallengeRequest>;
+
+export const CHALLENGE_MODES = ["SIMULATED", "WEBAUTHN"] as const;
+export type ChallengeMode = (typeof CHALLENGE_MODES)[number];
 
 export const zCreateChallengeResponse = z.object({
   challengeId: z.string().min(1),
@@ -176,58 +51,19 @@ export const zVerifyChallengeRequest = z.object({
 });
 export type VerifyChallengeRequest = z.infer<typeof zVerifyChallengeRequest>;
 
+export const TRANSACTION_STATUSES = [
+  "AUTHORIZED",
+  "DENIED",
+  "PENDING_RECOVERY",
+] as const;
+export type TransactionStatus = (typeof TRANSACTION_STATUSES)[number];
+
 export const zVerifyChallengeResponse = z.object({
   challengeId: z.string().min(1),
   verified: z.boolean(),
   transactionStatus: z.enum(TRANSACTION_STATUSES),
 });
 export type VerifyChallengeResponse = z.infer<typeof zVerifyChallengeResponse>;
-
-/* ------------------------------------------------------------------ */
-/* Passkey registration (Phase 7 WebAuthn)                             */
-/* ------------------------------------------------------------------ */
-
-export const zPasskeyRegisterOptionsRequest = z.object({
-  userId: z.string().min(1),
-});
-export type PasskeyRegisterOptionsRequest = z.infer<typeof zPasskeyRegisterOptionsRequest>;
-
-export const zPasskeyRegisterOptionsResponse = z.object({
-  ceremonyId: z.string().min(1),
-  /** PublicKeyCredentialCreationOptionsJSON — kept opaque here. */
-  options: z.record(z.string(), z.unknown()),
-});
-export type PasskeyRegisterOptionsResponse = z.infer<typeof zPasskeyRegisterOptionsResponse>;
-
-export const zPasskeyRegisterVerifyRequest = z.object({
-  ceremonyId: z.string().min(1),
-  /** RegistrationResponseJSON from the browser ceremony. */
-  response: z.unknown(),
-});
-export type PasskeyRegisterVerifyRequest = z.infer<typeof zPasskeyRegisterVerifyRequest>;
-
-export const zPasskeyRegisterVerifyResponse = z.object({
-  credentialId: z.string().min(1),
-  registered: z.literal(true),
-  passkeyEnrolled: z.boolean(),
-});
-export type PasskeyRegisterVerifyResponse = z.infer<typeof zPasskeyRegisterVerifyResponse>;
-
-/* ------------------------------------------------------------------ */
-/* Audit                                                               */
-/* ------------------------------------------------------------------ */
-
-export const zAuditEvent = z.object({
-  id: z.string().min(1),
-  decisionId: z.string().min(1),
-  eventType: z.enum(AUDIT_EVENT_TYPES),
-  reasonCode: z.string().min(1),
-  details: z.record(z.string(), z.unknown()),
-  createdAt: z.string().min(1),
-});
-export type AuditEvent = z.infer<typeof zAuditEvent>;
-
-export const zAuditTimeline = z.array(zAuditEvent);
 
 /* ------------------------------------------------------------------ */
 /* Errors                                                              */
@@ -249,7 +85,11 @@ export const ERROR_CODES = {
   CONFLICT: "CONFLICT",
   POLICY: "POLICY_REJECTION",
   CHALLENGE: "CHALLENGE_ERROR",
+  REPLAY: "REPLAY_ERROR",
   PAYLOAD_TOO_LARGE: "PAYLOAD_TOO_LARGE",
   RATE_LIMITED: "RATE_LIMITED",
   INTERNAL: "INTERNAL_ERROR",
 } as const;
+
+// Local import to keep the challenge schemas self-contained.
+import { FACTOR_IDS } from "./factors.js";
