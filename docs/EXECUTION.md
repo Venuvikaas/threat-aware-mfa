@@ -361,11 +361,11 @@ Rules:
 
 ---
 
-## ☐ PHASE 1 - Build the policy kernel 🔴 BLOCKING
+## ☑ PHASE 1 - Build the policy kernel 🔴 BLOCKING
 
 ### Threat classification
 
-- [ ] **[DEV]** Define reason-code constants and approved explanation copy.  
+- [x] **[DEV]** Define reason-code constants and approved explanation copy.  
   Required examples:
   - `RECENT_SIM_CHANGE`
   - `PHISHING_RELAY_SIGNAL`
@@ -377,10 +377,10 @@ Rules:
   
   Commit: `feat(policy): define stable reason codes`
 
-- [ ] **[DEV]** Define `demoPolicy.ts` with a visible policy version.  
+- [x] **[DEV]** Define `demoPolicy.ts` with a visible policy version.  
   Commit: `feat(policy): add versioned demo policy`
 
-- [ ] **[DEV]** Implement `classifyThreat()` with explicit precedence and no probability values.  
+- [x] **[DEV]** Implement `classifyThreat()` with explicit precedence and no probability values.  
   Decision rules:
   - Recent SIM change with supporting context -> `sim_channel_compromise`
   - Phishing-relay indicator -> `phishing`
@@ -389,24 +389,24 @@ Rules:
   
   Commit: `feat(engine): classify supported threats`
 
-- [ ] **[TEST]** Test each supported hypothesis, insufficient evidence, and conflicting primary indicators.  
+- [x] **[TEST]** Test each supported hypothesis, insufficient evidence, and conflicting primary indicators.  
   Commit: `test(engine): cover threat classification`
 
 ### Factor evaluation
 
-- [ ] **[DEV]** Define SMS OTP and passkey factor metadata.  
+- [x] **[DEV]** Define SMS OTP and passkey factor metadata.  
   Commit: `feat(policy): define factor registry`
 
-- [ ] **[DEV]** Implement threat-compatibility evaluation.  
+- [x] **[DEV]** Implement threat-compatibility evaluation.  
   Commit: `feat(engine): evaluate threat compatibility`
 
-- [ ] **[DEV]** Implement capability evaluation for passkey enrollment.  
+- [x] **[DEV]** Implement capability evaluation for passkey enrollment.  
   Commit: `feat(engine): evaluate factor availability`
 
-- [ ] **[DEV]** Implement assurance-threshold evaluation.  
+- [x] **[DEV]** Implement assurance-threshold evaluation.  
   Commit: `feat(engine): enforce assurance gate`
 
-- [ ] **[DEV]** Ensure every factor receives exactly one final state and one reason object.  
+- [x] **[DEV]** Ensure every factor receives exactly one final state and one reason object.  
   State precedence:
   1. `excluded` when threat-incompatible
   2. `unavailable` when not user-completable
@@ -415,30 +415,30 @@ Rules:
   
   Commit: `feat(engine): finalize factor evaluation states`
 
-- [ ] **[TEST]** Prove no threat-incompatible, unavailable, or below-assurance factor can be selected.  
+- [x] **[TEST]** Prove no threat-incompatible, unavailable, or below-assurance factor can be selected.  
   Commit: `test(engine): enforce factor-selection invariants`
 
 ### Outcome selection
 
-- [ ] **[DEV]** Implement fixed preference selection among eligible factors.  
+- [x] **[DEV]** Implement fixed preference selection among eligible factors.  
   Commit: `feat(engine): select eligible factor`
 
-- [ ] **[DEV]** Implement assisted-recovery fallback when no factor survives.  
+- [x] **[DEV]** Implement assisted-recovery fallback when no factor survives.  
   Commit: `feat(engine): add assisted recovery outcome`
 
-- [ ] **[DEV]** Compose the complete `evaluateScenario()` pure function.  
+- [x] **[DEV]** Compose the complete `evaluateScenario()` pure function.  
   Commit: `feat(engine): compose policy decision kernel`
 
-- [ ] **[TEST]** Test deep equality for repeated calls using identical input.  
+- [x] **[TEST]** Test deep equality for repeated calls using identical input.  
   Commit: `test(engine): verify deterministic output`
 
 ### Exit gate
 
-- [ ] The kernel accepts a scenario and policy and returns a complete decision.
-- [ ] The kernel has no React, storage, network, clock, random, or browser dependency.
-- [ ] All kernel tests pass.
-- [ ] No output contains a decimal probability.
-- [ ] Conflicting or unsupported evidence produces `insufficient_evidence`.
+- [x] The kernel accepts a scenario and policy and returns a complete decision.
+- [x] The kernel has no React, storage, network, clock, random, or browser dependency.
+- [x] All kernel tests pass.
+- [x] No output contains a decimal probability.
+- [x] Conflicting or unsupported evidence produces `insufficient_evidence`.
 
 ---
 
