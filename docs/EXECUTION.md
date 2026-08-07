@@ -442,14 +442,14 @@ Rules:
 
 ---
 
-## ☐ PHASE 2 - Complete the first vertical slice 🔴 BLOCKING
+## ☑ PHASE 2 - Complete the first vertical slice 🔴 BLOCKING
 
 ### SIM-swap scenario
 
-- [ ] **[DEV]** Create the default SIM-swap fixture with synthetic indicators.  
+- [x] **[DEV]** Create the default SIM-swap fixture with synthetic indicators.  
   Commit: `feat(scenario): add sim swap fixture`
 
-- [ ] **[TEST]** Assert the SIM-swap fixture produces:
+- [x] **[TEST]** Assert the SIM-swap fixture produces:
   - same documented high risk,
   - `sim_channel_compromise`,
   - `high_support` or the policy's explicit support band,
@@ -461,28 +461,28 @@ Rules:
 
 ### Minimum user interface
 
-- [ ] **[DEV]** Build `AppShell` with product name, one-line value proposition, and synthetic-data disclosure.  
+- [x] **[DEV]** Build `AppShell` with product name, one-line value proposition, and synthetic-data disclosure.  
   Commit: `feat(ui): add application shell`
 
-- [ ] **[DEV]** Build a single `ScenarioPanel` using the SIM-swap output.  
+- [x] **[DEV]** Build a single `ScenarioPanel` using the SIM-swap output.  
   Commit: `feat(ui): render scenario panel`
 
-- [ ] **[DEV]** Build evidence chips from `Decision.evidenceUsed`.  
+- [x] **[DEV]** Build evidence chips from `Decision.evidenceUsed`.  
   Commit: `feat(ui): render observed evidence`
 
-- [ ] **[DEV]** Build the threat summary with hypothesis, support band, and `Do not trust` property.  
+- [x] **[DEV]** Build the threat summary with hypothesis, support band, and `Do not trust` property.  
   Commit: `feat(ui): render threat summary`
 
-- [ ] **[DEV]** Build factor cards for SMS OTP and passkey.  
+- [x] **[DEV]** Build factor cards for SMS OTP and passkey.  
   Commit: `feat(ui): render factor states`
 
-- [ ] **[DEV]** Build the selected-factor outcome card.  
+- [x] **[DEV]** Build the selected-factor outcome card.  
   Commit: `feat(ui): render decision outcome`
 
-- [ ] **[DEV]** Add passkey-enrollment toggle. The toggle changes scenario input only.  
+- [x] **[DEV]** Add passkey-enrollment toggle. The toggle changes scenario input only.  
   Commit: `feat(ui): toggle passkey capability`
 
-- [ ] **[TEST]** Toggle passkey off and verify:
+- [x] **[TEST]** Toggle passkey off and verify:
   - threat hypothesis does not change,
   - passkey becomes unavailable,
   - SMS remains excluded,
@@ -490,15 +490,15 @@ Rules:
   
   Commit: `test(ui): verify capability fallback flow`
 
-- [ ] **[DEV]** Add deterministic reset to the default enrolled state.  
+- [x] **[DEV]** Add deterministic reset to the default enrolled state.  
   Commit: `feat(ui): add demo reset`
 
 ### Exit gate
 
-- [ ] One complete end-to-end scenario works from fixture to visible outcome.
-- [ ] The passkey toggle proves that availability does not override threat compatibility.
-- [ ] Reset always restores the same state.
-- [ ] No decision rule exists inside a React component.
+- [x] One complete end-to-end scenario works from fixture to visible outcome.
+- [x] The passkey toggle proves that availability does not override threat compatibility.
+- [x] Reset always restores the same state.
+- [x] No decision rule exists inside a React component.
 
 ---
 
