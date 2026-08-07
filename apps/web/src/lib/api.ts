@@ -12,6 +12,9 @@ import type {
   CreateDecisionRequest,
   CreateDecisionResponse,
   FactorId,
+  PasskeyRegisterOptionsResponse,
+  PasskeyRegisterVerifyRequest,
+  PasskeyRegisterVerifyResponse,
   VerifyChallengeResponse,
 } from "@mfa/contracts";
 
@@ -53,6 +56,8 @@ export interface DemoUser {
   id: string;
   name: string;
   passkeyEnrolled: boolean;
+  /** Real WebAuthn credentials (public data only) — drives ceremony vs fallback. */
+  passkeys: { id: string; createdAt: string }[];
   devices: { id: string; trusted: boolean; browserFingerprint: string }[];
 }
 
@@ -109,6 +114,20 @@ export const api = {
       `/api/v1/demo/users/${userId}/passkey-enrollment`,
       { method: "POST", body: JSON.stringify({ enrolled }) }
     ),
+
+  /** Begin a real WebAuthn registration ceremony for a demo user. */
+  passkeyRegisterOptions: (userId: string) =>
+    request<PasskeyRegisterOptionsResponse>("/api/v1/passkeys/register/options", {
+      method: "POST",
+      body: JSON.stringify({ userId }),
+    }),
+
+  /** Verify + persist the credential returned by the browser ceremony. */
+  passkeyRegisterVerify: (req: PasskeyRegisterVerifyRequest) =>
+    request<PasskeyRegisterVerifyResponse>("/api/v1/passkeys/register/verify", {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
 
   reset: () =>
     request<{ reset: boolean }>("/api/v1/demo/reset", { method: "POST" }),

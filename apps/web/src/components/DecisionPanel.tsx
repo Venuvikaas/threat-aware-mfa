@@ -1,10 +1,16 @@
 /**
- * Decision panel (docs/EXECUTION.md Phase 5/9).
+ * Decision panel (docs/EXECUTION.md Phase 5/9, Phase 7 WebAuthn).
  *
  * Renders ONLY what the backend returned: risk, threat, factor eligibility,
  * selected factor / recovery, persisted audit trail, and signal provenance.
  * Factor challenges are executed through the API so the backend enforces
  * blocked-factor policy (the wow-moment proof).
+ *
+ * Phase 7: a PASSKEY challenge comes back in mode WEBAUTHN (real ceremony) or
+ * mode SIMULATED (labeled automatic fallback). The panel runs the browser
+ * ceremony for WEBAUTHN challenges, and if that ceremony cannot complete it
+ * offers the explicitly labeled simulated fallback through the API — the
+ * fallback is never hidden or ambiguous.
  */
 import { useState } from "react";
 import type {
@@ -13,6 +19,7 @@ import type {
   FactorId,
 } from "@mfa/contracts";
 import { api, ApiError } from "../lib/api";
+import { getPasskeyAssertion } from "../lib/webauthn";
 import type { DecisionRecord, SlotKey } from "../types";
 import { AuditTimeline } from "./AuditTimeline";
 import { JsonInspector } from "./JsonInspector";
@@ -65,15 +72,22 @@ export function DecisionPanel({ record, slot, onStale }: Props) {
   const [verification, setVerification] = useState<string | null>(null);
   const [flowError, setFlowError] = useState<{ code: string; message: string } | null>(null);
   const [busyFactor, setBusyFactor] = useState<FactorId | null>(null);
+  /** The WebAuthn browser ceremony failed — offer the labeled simulated fallback. */
+  const [ceremonyInterrupted, setCeremonyInterrupted] = useState(false);
 
   const threat = THREAT_COPY[decision.threat.type] ?? THREAT_COPY.INSUFFICIENT_EVIDENCE;
 
-  async function runChallenge(factor: FactorId) {
+  async function runChallenge(factor: FactorId, preferSimulated = false) {
     setBusyFactor(factor);
     setFlowError(null);
+    setCeremonyInterrupted(false);
     setPhase("creating");
     try {
-      const created = await api.createChallenge({ decisionId: decision.decisionId, factor });
+      const created = await api.createChallenge({
+        decisionId: decision.decisionId,
+        factor,
+        ...(preferSimulated ? { preferSimulated: true } : {}),
+      });
       setChallenge(created);
       setPhase("ready");
     } catch (err) {
@@ -84,7 +98,7 @@ export function DecisionPanel({ record, slot, onStale }: Props) {
     }
   }
 
-  async function verify() {
+  async function verifySimulated() {
     if (!challenge) return;
     setPhase("verifying");
     try {
@@ -100,7 +114,25 @@ export function DecisionPanel({ record, slot, onStale }: Props) {
     }
   }
 
+  async function verifyWebAuthn() {
+    if (!challenge) return;
+    setPhase("verifying");
+    setFlowError(null);
+    try {
+      const assertion = await getPasskeyAssertion(challenge.publicOptions);
+      const result = await api.verifyChallenge(challenge.challengeId, assertion);
+      setVerification(`${result.verified ? "AUTHORIZED" : "DENIED"} · ${result.transactionStatus}`);
+      setPhase("verified");
+      onStale(slot);
+    } catch (err) {
+      setFlowError(extractError(err));
+      setCeremonyInterrupted(true);
+      setPhase("rejected");
+    }
+  }
+
   const blockedFactor = decision.factors.find((f) => f.status === "BLOCKED");
+  const isWebAuthn = challenge?.mode === "WEBAUTHN";
 
   return (
     <article className={`decision-panel ${slot === "right" ? "slot-right" : "slot-left"}`}>
@@ -177,23 +209,58 @@ export function DecisionPanel({ record, slot, onStale }: Props) {
               <span>Creating challenge…</span>
             ) : phase === "ready" && challenge ? (
               <div className="flow-ready">
-                <div>
-                  <span className="chip chip-sim">SIMULATED · {challenge.mode}</span>
+                <div className="flow-ready-meta">
+                  {isWebAuthn ? (
+                    <span className="chip chip-real">REAL PASSKEY · WEBAUTHN</span>
+                  ) : (
+                    <span className="chip chip-sim">SIMULATED · labeled demo fallback</span>
+                  )}
                   <code className="challenge-id">{challenge.challengeId}</code>
                   <span className="muted">expires {challenge.expiresAt}</span>
                 </div>
-                <button className="btn primary" onClick={verify}>
-                  Verify with simulated passkey
+                {isWebAuthn ? (
+                  <p className="form-note">
+                    Real WebAuthn ceremony — your authenticator will be prompted.
+                  </p>
+                ) : (
+                  <p className="form-note">
+                    Simulated adapter fallback: no real ceremony runs for this challenge.
+                  </p>
+                )}
+                <button
+                  className="btn primary"
+                  onClick={isWebAuthn ? verifyWebAuthn : verifySimulated}
+                >
+                  {isWebAuthn ? "Verify with passkey (WebAuthn)" : "Verify with simulated passkey"}
                 </button>
               </div>
             ) : phase === "verifying" ? (
-              <span>Verifying challenge…</span>
+              <span>
+                {isWebAuthn ? "Awaiting authenticator verification…" : "Verifying challenge…"}
+              </span>
             ) : phase === "rejected" && flowError ? (
               <div className="rejection">
-                <span className="rejection-title">
-                  {flowError.code} — blocked by persisted policy
-                </span>
-                <span>{flowError.message}</span>
+                {ceremonyInterrupted ? (
+                  <>
+                    <span className="rejection-title">
+                      WebAuthn ceremony did not complete — {flowError.code}
+                    </span>
+                    <span>{flowError.message}</span>
+                    <button
+                      className="btn ghost"
+                      onClick={() => void runChallenge("PASSKEY", true)}
+                    >
+                      Use the simulated passkey instead (demo fallback)
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="rejection-title">
+                      {flowError.code} — blocked by persisted policy
+                    </span>
+                    <span>{flowError.message}</span>
+                  </>
+                )}
               </div>
             ) : null}
           </div>
