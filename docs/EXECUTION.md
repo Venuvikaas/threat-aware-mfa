@@ -669,11 +669,11 @@ Rules:
 
 ---
 
-## ☐ PHASE 6 - Documentation and submission readiness 🔴 BLOCKING
+## ☑ PHASE 6 - Documentation and submission readiness 🔴 BLOCKING
 
 ### README
 
-- [ ] **[DOCS]** Write `README.md` with:
+- [x] **[DOCS]** Write `README.md` with:
   - product statement,
   - problem,
   - what the simulator demonstrates,
@@ -687,12 +687,12 @@ Rules:
   
   Commit: `docs: add project readme`
 
-- [ ] **[DOCS]** Ensure clone-to-run instructions fit in fewer than ten commands.  
+- [x] **[DOCS]** Ensure clone-to-run instructions fit in fewer than ten commands.  
   Commit: `docs: simplify local runbook`
 
 ### Demo script
 
-- [ ] **[DOCS]** Write `docs/demo-script.md` using this sequence:
+- [x] **[DOCS]** Write `docs/demo-script.md` using this sequence:
   1. Ask whether equal risk should mean equal authentication.
   2. Point to the shared high-risk score.
   3. Reveal SIM-change evidence versus phishing-relay evidence.
@@ -705,26 +705,26 @@ Rules:
   
   Commit: `docs: add final demo script`
 
-- [ ] **[DEMO]** Ensure every statement in the script is visible in the product or explicitly framed as a product-boundary explanation.  
+- [x] **[DEMO]** Ensure every statement in the script is visible in the product or explicitly framed as a product-boundary explanation.  
   Commit: `docs: align demo claims with product`
 
 ### Submission evidence
 
-- [ ] **[DOCS]** Add final screenshots or recording link placeholders to the README.  
+- [x] **[DOCS]** Add final screenshots or recording link placeholders to the README.  
   Commit: `docs: add demo evidence section`
 
-- [ ] **[DOCS]** Complete `DECISIONS.md` with all scope cuts made during implementation.  
+- [x] **[DOCS]** Complete `DECISIONS.md` with all scope cuts made during implementation.  
   Commit: `docs: finalize engineering decisions`
 
-- [ ] **[TEST]** Scan tracked files and Git history for secrets or accidental `.env` content.  
+- [x] **[TEST]** Scan tracked files and Git history for secrets or accidental `.env` content.  
   Commit: `chore: complete secrets review`
 
 ### Exit gate
 
-- [ ] A new reviewer can understand the product boundary from the README.
-- [ ] The demo script matches the shipped UI exactly.
-- [ ] All major cuts have a recorded reason.
-- [ ] No secrets or external credentials are required.
+- [x] A new reviewer can understand the product boundary from the README.
+- [x] The demo script matches the shipped UI exactly.
+- [x] All major cuts have a recorded reason.
+- [x] No secrets or external credentials are required.
 
 ---
 
