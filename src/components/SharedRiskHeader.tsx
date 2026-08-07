@@ -9,7 +9,17 @@ export function SharedRiskHeader({ scenarios }: SharedRiskHeaderProps) {
 
   return (
     <section className="shared-risk" aria-label="Shared scalar risk">
-      <p className="shared-risk-label">Same aggregate risk · same assurance requirement</p>
+      <div className="shared-risk-anchor">
+        <span className="same-risk-badge">SAME RISK</span>
+        <div>
+          <p className="shared-risk-label">
+            Equal aggregate risk · equal assurance requirement
+          </p>
+          <p className="shared-risk-question">
+            Should these payments receive the same authentication challenge?
+          </p>
+        </div>
+      </div>
       <div className="shared-risk-values">
         <div className="shared-risk-value">
           <span className="shared-risk-key">Aggregate risk</span>
@@ -30,9 +40,6 @@ export function SharedRiskHeader({ scenarios }: SharedRiskHeaderProps) {
           </span>
         </div>
       </div>
-      <p className="shared-risk-question">
-        Equal risk — should the authentication decision be equal?
-      </p>
     </section>
   );
 }
