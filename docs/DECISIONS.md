@@ -101,10 +101,24 @@ Consequence: The prototype does not implement or simulate the recovery journey i
 
 ---
 
-## Later scope cuts (recorded during implementation)
+## Scope cuts recorded at the end of the build (Phase 6)
 
-This section is completed at the end of the build (Phase 6). No cuts so far beyond
-the initial decisions above.
+No must-build item was cut: the full Phase 0-6 checklist completed and its exit
+gates passed, including the clean-checkout smoke gate and the offline production
+preview. Two implementation-time refinements were recorded for transparency:
+
+1. **tsconfig simplification** — the composite project reference to
+   `tsconfig.node.json` was removed because it disabled emit (TS6310); a single
+   root tsconfig now type-checks src, tests, and vite.config.ts. This is
+   configuration hygiene, not a scope change.
+2. **Adjacent UI commits merged** — a few checklist boxes that land in the same
+   file share one commit (e.g., threat compatibility + availability + assurance
+   gates in `evaluateFactors.ts`). Commit history remains one-commit-per-logical-unit and every box maps to a real change.
+
+The optional features (A: decision JSON export, B: customer outcome preview,
+C: keyboard controls) were intentionally not started until all mandatory phase
+gates passed; per EXECUTION.md Part 4 they are evaluated only after the
+must-build path is green.
 
 ---
 
