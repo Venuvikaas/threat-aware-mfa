@@ -1,6 +1,10 @@
 /**
- * Structured JSON error middleware (docs/EXECUTION.md Phase 1) plus a small
- * Zod request-validation helper used by the decision routes in Phase 3.
+ * Structured JSON error middleware (docs/EXECUTION.md Phase 1/8) plus a small
+ * Zod request-validation helper.
+ *
+ * Handles framework-level failures too: malformed JSON bodies (400), payloads
+ * over the configured limit (413), and rate-limit rejections (429) all come
+ * back in the same frozen error shape.
  */
 import type { NextFunction, Request, Response } from "express";
 import type { ZodSchema } from "zod";
@@ -61,24 +65,68 @@ export function notFoundHandler(_req: Request, res: Response): void {
 
 export function errorHandler(
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ): void {
   if (err instanceof ApiError) {
-    const body: ErrorResponse = {
-      error: {
-        code: err.code,
-        message: err.message,
-        ...(err.details !== undefined && { details: err.details }),
-      },
-    };
-    res.status(err.status).json(body);
+    respond(res, err.status, err.code, err.message, err.details, req);
     return;
   }
-  console.error("[api] unhandled error", err);
-  const body: ErrorResponse = {
-    error: { code: ERROR_CODES.INTERNAL, message: "Internal server error" },
+
+  const anyErr = err as {
+    type?: string;
+    status?: number;
+    statusCode?: number;
+    message?: string;
   };
-  res.status(500).json(body);
+
+  // Body-parser failures (express.json).
+  if (anyErr.type === "entity.parse.failed") {
+    respond(res, 400, ERROR_CODES.VALIDATION, "Malformed JSON request body", undefined, req);
+    return;
+  }
+  if (anyErr.type === "entity.too.large") {
+    respond(res, 413, ERROR_CODES.PAYLOAD_TOO_LARGE, "Request payload too large", undefined, req);
+    return;
+  }
+
+  // Framework middlewares (e.g. express-rate-limit) pass a status code.
+  const status = anyErr.status ?? anyErr.statusCode;
+  if (typeof status === "number") {
+    const code =
+      status === 429 ? ERROR_CODES.RATE_LIMITED : ERROR_CODES.INTERNAL;
+    const message =
+      status === 429
+        ? "Too many requests — slow down"
+        : anyErr.message ?? "Request failed";
+    respond(res, status, code, message, undefined, req);
+    return;
+  }
+
+  console.error(
+    `[api] unhandled error corr=${(req as Request & { correlationId?: string }).correlationId ?? "-"}`,
+    err
+  );
+  respond(res, 500, ERROR_CODES.INTERNAL, "Internal server error", undefined, req);
+}
+
+function respond(
+  res: Response,
+  status: number,
+  code: string,
+  message: string,
+  details: unknown,
+  req: Request
+): void {
+  const correlationId = (req as Request & { correlationId?: string }).correlationId;
+  const body: ErrorResponse = {
+    error: {
+      code,
+      message,
+      ...(details !== undefined && { details }),
+      ...(correlationId && { correlationId }),
+    },
+  };
+  res.status(status).json(body);
 }
