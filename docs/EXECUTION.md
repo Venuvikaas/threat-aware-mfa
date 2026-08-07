@@ -326,38 +326,38 @@ Rules:
 
 # PART 3 - Mega checklist
 
-## ☐ PHASE 0 - Freeze scope and contracts 🔴 BLOCKING
+## ☑ PHASE 0 - Freeze scope and contracts 🔴 BLOCKING
 
-- [ ] **[DOCS]** Place the final PRD at `docs/PRD.md`.  
+- [x] **[DOCS]** Place the final PRD at `docs/PRD.md`.  
   Commit: `docs: add final product requirements`
 
-- [ ] **[DOCS]** Add this file as `docs/EXECUTION.md`.  
+- [x] **[DOCS]** Add this file as `docs/EXECUTION.md`.  
   Commit: `docs: add execution framework`
 
-- [ ] **[DOCS]** Create `docs/DECISIONS.md` with the eight required initial decisions.  
+- [x] **[DOCS]** Create `docs/DECISIONS.md` with the eight required initial decisions.  
   Commit: `docs: record final scope decisions`
 
-- [ ] **[DEV]** Initialize a React, Vite, and TypeScript application with no backend template.  
+- [x] **[DEV]** Initialize a React, Vite, and TypeScript application with no backend template.  
   Commit: `chore: initialize client application`
 
-- [ ] **[DEV]** Add `.gitignore` for `.env`, `node_modules`, build output, coverage, editor files, and OS files.  
+- [x] **[DEV]** Add `.gitignore` for `.env`, `node_modules`, build output, coverage, editor files, and OS files.  
   Commit: `chore: add repository hygiene`
 
-- [ ] **[DEV]** Create the repository folders shown above.  
+- [x] **[DEV]** Create the repository folders shown above.  
   Commit: `chore: scaffold project structure`
 
-- [ ] **[DEV]** 🔗 Freeze all domain types in `src/engine/types.ts`.  
+- [x] **[DEV]** 🔗 Freeze all domain types in `src/engine/types.ts`.  
   Commit: `feat(engine): freeze decision contracts`
 
-- [ ] **[TEST]** Confirm the project installs, type-checks, and renders the untouched app shell.  
+- [x] **[TEST]** Confirm the project installs, type-checks, and renders the untouched app shell.  
   Commit: `test: verify project bootstrap`
 
 ### Exit gate
 
-- [ ] `npm run dev` renders locally.
-- [ ] `npm run build` succeeds.
-- [ ] Contracts are committed before decision logic or UI components.
-- [ ] The repository contains no backend, database, auth, LLM, or chart dependency.
+- [x] `npm run dev` renders locally.
+- [x] `npm run build` succeeds.
+- [x] Contracts are committed before decision logic or UI components.
+- [x] The repository contains no backend, database, auth, LLM, or chart dependency.
 
 ---
 
