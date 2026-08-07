@@ -253,3 +253,15 @@ Reason: The stretch phase's exit gate requires "registration and authentication 
 Rejected: Shipping WebAuthn that required changing the demo host, browser profile, or critical-path contracts; accepting `{ simulatedOk: true }` on a real WEBAUTHN challenge (that would let API readers bypass the ceremony); and deleting the simulated adapter. One additive, optional request field was added to the frozen contract: `preferSimulated` on `POST /api/v1/challenges`, a demo-only hint rejected outside demo mode that lets the UI offer the labeled fallback when a browser ceremony cannot complete.
 
 Consequence: Registration and authentication are demo-gated (the only users are synthetic). If the ceremony is unstable in the exact presentation environment, the kill criteria still apply — nothing in the decision, persistence, or audit path depends on the browser ceremony.
+
+---
+
+## Dependency-driven trust engine (EXECUTION_new2.md)
+
+Decision: Adopt the dependency-driven trust model as the architectural center, superseding the threat-compatibility policy engine. Evidence with provenance feeds independent threat hypotheses; assessed threats change ordinal trust state across explicit trust domains (SIM ownership, telecom delivery, device integrity, credential integrity, origin binding, session integrity, user verification, knowledge secrecy, network availability); the declarative factor catalog (SMS OTP, passkey, TOTP, PIN) expresses trust, capability, assurance, and friction requirements; and a generic evaluator derives eligibility with no factor-specific branches. The engine never contains a rule like "if threat is SIM swap, block SMS" — it derives that SMS OTP is ineligible because SIM ownership became DISTRUSTED and SMS OTP requires SIM ownership TRUSTED.
+
+Reason: The technical review retained dependency-driven trust evaluation as the primary differentiator. It makes the reasoning chain explicit and auditable (evidence → threat → trust impact → factor dependency → eligibility → selection), enables replay and verified remediation over the same structure, and keeps the policy declarative and immutable.
+
+Rejected: The previous threat-compatibility engine (factor outcomes hardcoded against threat types), percentage trust scores, manually maintained threat-factor compatibility tables, and any factor-specific branch in the evaluator.
+
+Consequence: Every decision stores bundle id, version, and content hash; every trace event stores evaluated rule ids; replay, diff, and remediation operate over the same pure engine; and the React console renders evidence, threats, trust, factors, and trace from the API response only.
