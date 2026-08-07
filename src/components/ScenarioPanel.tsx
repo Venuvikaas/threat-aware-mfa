@@ -1,16 +1,19 @@
+import type { ReactNode } from "react";
 import type { Decision, Scenario } from "../engine/types";
 import { DecisionTrace } from "./DecisionTrace";
 
 interface ScenarioPanelProps {
   scenario: Scenario;
   decision: Decision;
-  control?: React.ReactNode;
+  control?: ReactNode;
+  exportButton?: ReactNode;
 }
 
 export function ScenarioPanel({
   scenario,
   decision,
   control,
+  exportButton,
 }: ScenarioPanelProps) {
   return (
     <section className="scenario-panel" aria-label={scenario.title}>
@@ -23,7 +26,10 @@ export function ScenarioPanel({
             risk
           </p>
         </div>
-        {control}
+        <div className="scenario-panel-actions">
+          {control}
+          {exportButton}
+        </div>
       </header>
       <DecisionTrace decision={decision} />
     </section>

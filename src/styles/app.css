@@ -806,3 +806,90 @@ input {
     font-size: 0.9rem;
   }
 }
+
+/* ---------- Optional features ---------- */
+
+.scenario-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.export-button {
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.export-button:hover {
+  border-color: var(--ink-muted);
+  background: var(--surface-soft);
+}
+
+.export-button.is-copied {
+  border-color: var(--eligible);
+  background: var(--eligible-bg);
+  color: #15803d;
+}
+
+.customer-preview {
+  margin-top: 0.7rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.customer-preview.is-recovery {
+  border-color: #ddd6fe;
+  background: var(--recovery-bg);
+}
+
+.customer-preview-label {
+  margin: 0 0 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.customer-preview-bubble {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.customer-preview.is-recovery .customer-preview-bubble {
+  color: #4c1d95;
+}
+
+.keyboard-hints {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-muted);
+}
+
+.keyboard-hints kbd {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink);
+}

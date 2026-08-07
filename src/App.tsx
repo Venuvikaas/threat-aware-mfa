@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { evaluateScenario } from "./engine/evaluateScenario";
 import { scalarBaseline } from "./engine/scalarBaseline";
 import { demoPolicy } from "./policy/demoPolicy";
@@ -10,6 +10,7 @@ import { BaselineCard } from "./components/BaselineCard";
 import { ComparisonWorkspace } from "./components/ComparisonWorkspace";
 import { ScenarioPanel } from "./components/ScenarioPanel";
 import { CapabilityToggle } from "./components/CapabilityToggle";
+import { DecisionExport } from "./components/DecisionExport";
 import "./styles/tokens.css";
 import "./styles/app.css";
 
@@ -60,6 +61,13 @@ function App() {
     setCapabilities((prev) => ({ ...prev, [id]: { passkeyEnrolled } }));
   }
 
+  function togglePasskey(id: (typeof scenarioIds)[number]) {
+    setCapabilities((prev) => ({
+      ...prev,
+      [id]: { passkeyEnrolled: !prev[id].passkeyEnrolled },
+    }));
+  }
+
   function reset() {
     setCapabilities(
       Object.fromEntries(
@@ -68,12 +76,45 @@ function App() {
     );
   }
 
+  // Keyboard demo controls: 1/2 toggle passkey per panel, R resets.
+  // Ignored while typing in a control so keys never hijack the UI mid-input.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === "1") {
+        togglePasskey("sim-swap");
+      } else if (key === "2") {
+        togglePasskey("phishing");
+      } else if (key === "r") {
+        reset();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   return (
     <AppShell>
       <SharedRiskHeader scenarios={scenarios} />
 
       <div className="demo-controls">
-        <p className="demo-controls-label">Capability & reset</p>
+        <p className="demo-controls-label">
+          Capability & reset
+          <span className="keyboard-hints">
+            Press <kbd>1</kbd>/<kbd>2</kbd> to toggle passkey · <kbd>R</kbd> to
+            reset
+          </span>
+        </p>
         <div className="demo-controls-actions">
           <button type="button" className="reset-button" onClick={reset}>
             Reset demo
@@ -93,6 +134,7 @@ function App() {
               onChange={(checked) => updateCapability("sim-swap", checked)}
             />
           }
+          exportButton={<DecisionExport decision={simDecision} />}
         />
         <ScenarioPanel
           scenario={scenarioFor("phishing")}
@@ -103,6 +145,7 @@ function App() {
               onChange={(checked) => updateCapability("phishing", checked)}
             />
           }
+          exportButton={<DecisionExport decision={phishingDecision} />}
         />
       </ComparisonWorkspace>
 
