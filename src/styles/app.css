@@ -461,11 +461,6 @@ input {
   background: var(--threat);
 }
 
-.threat-summary-distrust {
-  margin: 0.5rem 0 0;
-  font-size: 0.85rem;
-  color: #78350f;
-}
 
 /* ---------- Do-not-trust list ---------- */
 

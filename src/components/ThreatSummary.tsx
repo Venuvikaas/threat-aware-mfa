@@ -27,12 +27,6 @@ export function ThreatSummary({ decision }: ThreatSummaryProps) {
         <span className="band-dot" aria-hidden="true" />
         {SUPPORT_LABELS[decision.supportBand]}
       </p>
-      {decision.doNotTrust.length > 0 && (
-        <p className="threat-summary-distrust">
-          <strong>Do not trust:</strong>{" "}
-          {decision.doNotTrust.join(" · ")}
-        </p>
-      )}
     </section>
   );
 }

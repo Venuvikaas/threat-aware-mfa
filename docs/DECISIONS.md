@@ -133,3 +133,15 @@ Rejected: Any claim that the prototype detects fraud, authenticates a real payme
 Consequence: All evidence labels are explicitly "synthetic indicators", and the outcome card always reads "Authentication execution simulated".
 
 Audit result: A regex scan of `src/` for prohibited claims (detect*, calibrat*, probability, production-ready, compliance, executes, universal) found no UI copy violations; the only matches were CSS `border-radius` values.
+
+---
+
+## UI verification approach (post-review note)
+
+Decision: The "test(ui)" checklist boxes are satisfied by engine-level tests plus scripted browser verification (Chrome DevTools automation) of the toggle, fallback, reset, and responsive layout.
+
+Reason: Components contain no decision logic — they render the `Decision` object — so DOM-level tests would duplicate engine coverage without adding proof of the product claim.
+
+Rejected: Adding @testing-library/jsdom component tests for the demo path.
+
+Consequence: Interactive behavior is verified by the automated browser smoke runs recorded in this log, not by a jsdom test suite.
