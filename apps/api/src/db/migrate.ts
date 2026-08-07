@@ -1,5 +1,5 @@
 /**
- * CLI entry for applying migrations to a real database file:
+ * CLI entry for applying migrations + seed to a real database file:
  *
  *   npm run db:migrate -w @mfa/api
  *
@@ -9,6 +9,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defaultDbPath, openDatabase, runMigrations } from "./connection.js";
+import { seedDemoData } from "./seed.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.DB_PATH ?? defaultDbPath();
@@ -16,6 +17,7 @@ const dbPath = process.env.DB_PATH ?? defaultDbPath();
 mkdirSync(path.dirname(dbPath), { recursive: true });
 const db = openDatabase(dbPath);
 const applied = runMigrations(db, path.join(here, "migrations"));
+seedDemoData(db);
 console.log(
   applied.length
     ? `[db] applied: ${applied.join(", ")}`
