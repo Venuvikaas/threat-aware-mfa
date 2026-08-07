@@ -61,6 +61,19 @@ export const AUDIT_EVENT_TYPES = [
 export type AuditEventType = (typeof AUDIT_EVENT_TYPES)[number];
 
 /* ------------------------------------------------------------------ */
+/* Numeric sanity caps (Phase 8 hardening).                            */
+/* ------------------------------------------------------------------ */
+
+/** ₹100 crore in minor units — a generous ceiling for demo transactions. */
+export const MAX_AMOUNT_MINOR = 100_000_000_00;
+/** One year in seconds — a session cannot plausibly be older. */
+export const MAX_SESSION_AGE_SECONDS = 31_536_000;
+/** A demo user cannot plausibly accumulate more failed logins than this. */
+export const MAX_FAILED_LOGIN_COUNT = 1000;
+/** A login distance cannot exceed the earth's circumference. */
+export const MAX_GEO_DISTANCE_KM = 40_075;
+
+/* ------------------------------------------------------------------ */
 /* Decision request / response                                        */
 /* ------------------------------------------------------------------ */
 
@@ -70,15 +83,15 @@ export const zCreateDecisionRequest = z.object({
   userId: z.string().min(1),
   transaction: z.object({
     clientTransactionId: z.string().min(1),
-    amountMinor: z.number().int().nonnegative(),
+    amountMinor: z.number().int().nonnegative().max(MAX_AMOUNT_MINOR),
     currency: zCurrency,
     payeeId: z.string().min(1),
     payeeIsKnown: z.boolean(),
   }),
   session: z.object({
     sessionId: z.string().min(1),
-    ageSeconds: z.number().nonnegative(),
-    failedLoginCount: z.number().int().nonnegative(),
+    ageSeconds: z.number().nonnegative().max(MAX_SESSION_AGE_SECONDS),
+    failedLoginCount: z.number().int().nonnegative().max(MAX_FAILED_LOGIN_COUNT),
     ipAddress: z.string().min(1),
     asn: z.string().min(1),
     country: z.string().min(1),
@@ -91,7 +104,11 @@ export const zCreateDecisionRequest = z.object({
   }),
   signals: z.object({
     recentSimChange: z.boolean().nullable(),
-    geoDistanceFromLastLoginKm: z.number().nonnegative().nullable(),
+    geoDistanceFromLastLoginKm: z
+      .number()
+      .nonnegative()
+      .max(MAX_GEO_DISTANCE_KM)
+      .nullable(),
     phishingRelayIndicator: z.boolean(),
   }),
 });

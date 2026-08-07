@@ -22,7 +22,11 @@ export interface ProviderContext {
 export interface SignalProvider {
   /** Stable provider identity, e.g. "mock_telco_adapter". */
   readonly name: string;
-  /** The single signal name this provider owns. */
+  /**
+   * The single signal name this provider owns. Providers own exactly one
+   * signal: the failure path records exactly `signalName` as an explicit
+   * unknown signal, so a provider must never own more than one.
+   */
   readonly signalName: string;
   getSignals(ctx: ProviderContext): SignalValue[];
 }
