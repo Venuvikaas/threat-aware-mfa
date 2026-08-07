@@ -151,6 +151,13 @@ export type CreateDecisionResponse = z.infer<typeof zCreateDecisionResponse>;
 export const zCreateChallengeRequest = z.object({
   decisionId: z.string().min(1),
   factor: z.enum(FACTOR_IDS),
+  /**
+   * Demo-only hint (Phase 7): create the labeled SIMULATED challenge even
+   * when a real WebAuthn ceremony would be possible. Additive and optional;
+   * the server still enforces factor policy and the response contract is
+   * unchanged. Rejected outside demo mode.
+   */
+  preferSimulated: z.boolean().optional(),
 });
 export type CreateChallengeRequest = z.infer<typeof zCreateChallengeRequest>;
 
@@ -175,6 +182,36 @@ export const zVerifyChallengeResponse = z.object({
   transactionStatus: z.enum(TRANSACTION_STATUSES),
 });
 export type VerifyChallengeResponse = z.infer<typeof zVerifyChallengeResponse>;
+
+/* ------------------------------------------------------------------ */
+/* Passkey registration (Phase 7 WebAuthn)                             */
+/* ------------------------------------------------------------------ */
+
+export const zPasskeyRegisterOptionsRequest = z.object({
+  userId: z.string().min(1),
+});
+export type PasskeyRegisterOptionsRequest = z.infer<typeof zPasskeyRegisterOptionsRequest>;
+
+export const zPasskeyRegisterOptionsResponse = z.object({
+  ceremonyId: z.string().min(1),
+  /** PublicKeyCredentialCreationOptionsJSON — kept opaque here. */
+  options: z.record(z.string(), z.unknown()),
+});
+export type PasskeyRegisterOptionsResponse = z.infer<typeof zPasskeyRegisterOptionsResponse>;
+
+export const zPasskeyRegisterVerifyRequest = z.object({
+  ceremonyId: z.string().min(1),
+  /** RegistrationResponseJSON from the browser ceremony. */
+  response: z.unknown(),
+});
+export type PasskeyRegisterVerifyRequest = z.infer<typeof zPasskeyRegisterVerifyRequest>;
+
+export const zPasskeyRegisterVerifyResponse = z.object({
+  credentialId: z.string().min(1),
+  registered: z.literal(true),
+  passkeyEnrolled: z.boolean(),
+});
+export type PasskeyRegisterVerifyResponse = z.infer<typeof zPasskeyRegisterVerifyResponse>;
 
 /* ------------------------------------------------------------------ */
 /* Audit                                                               */
