@@ -38,6 +38,7 @@ import {
   PasskeyRegistrationRepository,
 } from "../repositories/passkeyRepository.js";
 import { UserRepository } from "../repositories/userRepository.js";
+import { CapabilityRepository } from "../repositories/capabilityRepository.js";
 
 const RP_NAME = "Threat-Aware MFA";
 /** Fallback origin when a request carries no Origin header (curl, same-origin). */
@@ -82,11 +83,13 @@ export class WebAuthnService {
   private readonly credentials: PasskeyCredentialRepository;
   private readonly registrations: PasskeyRegistrationRepository;
   private readonly users: UserRepository;
+  private readonly capabilities: CapabilityRepository;
 
   constructor(private readonly db: Db) {
     this.credentials = new PasskeyCredentialRepository(db);
     this.registrations = new PasskeyRegistrationRepository(db);
     this.users = new UserRepository(db);
+    this.capabilities = new CapabilityRepository(db);
   }
 
   /** True only for origins WebAuthn can run in: https or a localhost alias. */
@@ -217,7 +220,8 @@ export class WebAuthnService {
         backedUp: info.credentialBackedUp,
         createdAt: now.toISOString(),
       });
-      this.users.setPasskeyEnrolled(ceremony.userId, true);
+      // Enrollment flips the PASSKEY_ENROLLED capability (capability gate).
+      this.capabilities.setAvailable(ceremony.userId, "PASSKEY_ENROLLED", true);
     });
 
     try {

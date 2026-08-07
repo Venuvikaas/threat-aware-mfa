@@ -1,16 +1,15 @@
 /**
- * Challenge service (docs/EXECUTION_new.md Phase 6/7).
+ * Challenge service (EXECUTION_new2.md §5.3, Phase 4).
  *
- * - Challenge creation is refused for blocked or unavailable factors
- *   (POLICY_REJECTION) — the direct-API enforcement proof point.
- * - The PASSKEY adapter runs a real WebAuthn ceremony when a credential is
- *   registered and the origin is WebAuthn-capable; otherwise it automatically
- *   falls back to the labeled SIMULATED adapter. A demo-only `preferSimulated`
- *   hint lets the UI explicitly request the labeled simulated path.
- * - Verification rejects missing, expired, consumed challenges; a WEBAUTHN
- *   challenge must also be verified from the origin it was issued for; and
- *   consumption, transaction-state update, signature-counter persistence, and
- *   audit all commit in one database transaction.
+ * - Challenge creation is refused unless the persisted decision marks the
+ *   factor ELIGIBLE and policy permits it (POLICY_REJECTION) — the direct-API
+ *   enforcement proof point. Ineligible, unavailable, disabled, and
+ *   non-selected factors can never create a challenge.
+ * - PASSKEY runs the labeled simulated adapter by default (the required safe
+ *   execution path); the WebAuthn stretch adapter is used when available.
+ * - Verification rejects missing, expired, and consumed challenges; an
+ *   outcome trace event (CHALLENGE/OUTCOME) is appended atomically with
+ *   consumption.
  */
 import type {
   CreateChallengeResponse,
@@ -28,12 +27,9 @@ import {
   policyError,
   validationError,
 } from "../middleware/errorHandler.js";
-import { AuditRepository } from "../repositories/auditRepository.js";
 import { ChallengeRepository } from "../repositories/challengeRepository.js";
 import { DecisionRepository } from "../repositories/decisionRepository.js";
-import { PasskeyCredentialRepository } from "../repositories/passkeyRepository.js";
 import { TransactionRepository } from "../repositories/transactionRepository.js";
-import { resolveOrigin, type AuthChallengeData } from "./webauthnService.js";
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 
@@ -51,8 +47,6 @@ export class ChallengeService {
   private readonly decisions: DecisionRepository;
   private readonly transactions: TransactionRepository;
   private readonly challenges: ChallengeRepository;
-  private readonly audit: AuditRepository;
-  private readonly passkeys: PasskeyCredentialRepository;
   private readonly adapters: Partial<Record<FactorId, FactorAdapter>>;
   private readonly simulated = new SimulatedPasskeyAdapter();
 
@@ -63,8 +57,6 @@ export class ChallengeService {
     this.decisions = new DecisionRepository(db);
     this.transactions = new TransactionRepository(db);
     this.challenges = new ChallengeRepository(db);
-    this.audit = new AuditRepository(db);
-    this.passkeys = new PasskeyCredentialRepository(db);
     this.adapters = buildFactorAdapters(db);
   }
 
@@ -78,15 +70,17 @@ export class ChallengeService {
       throw notFoundError(`Decision ${decisionId} not found`);
     }
 
-    const allowed = decision.allowedFactors.includes(factor);
-    if (!allowed) {
-      const evaluation = decision.factorEvaluations.find((f) => f.factor === factor);
+    // Enforce the persisted factor decision — never recompute eligibility.
+    const evaluation = decision.factors.find((f) => f.factorId === factor);
+    const eligible = evaluation?.status === "ELIGIBLE";
+    if (!eligible) {
       throw policyError(
-        `Factor ${factor} is not allowed for this decision`,
+        `Factor ${factor} is not eligible for this decision`,
         {
           factor,
-          status: evaluation?.status ?? "UNKNOWN",
-          reasonCode: evaluation?.reasonCode ?? "not_in_allowed_list",
+          status: evaluation?.status ?? "NOT_EVALUATED",
+          failedRequirements: evaluation?.failedRequirements ?? [],
+          reasonCodes: evaluation?.failedRequirements.map((r) => r.reasonCode) ?? [],
         }
       );
     }
@@ -106,14 +100,13 @@ export class ChallengeService {
     } else {
       adapter = this.adapters[factor];
     }
+    if (!adapter) {
+      throw policyError(`No adapter is registered for factor ${factor}`);
+    }
 
     const now = new Date();
     const createdAt = now.toISOString();
     const expiresAt = new Date(now.getTime() + CHALLENGE_TTL_MS).toISOString();
-
-    if (!adapter) {
-      throw policyError(`No adapter is registered for factor ${factor}`);
-    }
 
     const created = await adapter.createChallenge({
       decisionId,
@@ -122,24 +115,25 @@ export class ChallengeService {
     });
     const challengeId = newId("ch");
 
-    this.challenges.create({
-      id: challengeId,
-      decisionId,
-      factor,
-      mode: created.mode,
-      challengeData: created.challengeData,
-      expiresAt,
-      consumedAt: null,
-      verified: false,
-      createdAt,
+    const apply = this.db.transaction(() => {
+      this.challenges.create({
+        id: challengeId,
+        decisionId,
+        factor,
+        mode: created.mode,
+        challengeData: created.challengeData,
+        expiresAt,
+        consumedAt: null,
+        verified: false,
+        createdAt,
+      });
+      this.appendChallengeTrace(decisionId, "CHALLENGE", `challenge_created_${factor.toLowerCase()}`, {
+        challengeId,
+        factor,
+        mode: created.mode,
+      });
     });
-    this.audit.insert({
-      decisionId,
-      eventType: "CHALLENGE_CREATED",
-      reasonCode: "challenge_created",
-      details: { factor, mode: created.mode, challengeId },
-      createdAt,
-    });
+    apply();
 
     return {
       challengeId,
@@ -168,24 +162,23 @@ export class ChallengeService {
       throw challengeError(`Challenge ${challengeId} has already been consumed`);
     }
 
-    // Phase 7 origin binding: a WEBAUTHN challenge must be verified from the
-    // origin it was issued for (defense-in-depth on top of the stored
-    // expected-origin check inside the ceremony verification).
+    // Phase 7 origin binding (stretch): a WEBAUTHN challenge must be verified
+    // from the origin it was issued for.
     if (challenge.mode === "WEBAUTHN") {
-      const data = challenge.challengeData as Partial<AuthChallengeData> | null;
+      const data = challenge.challengeData as
+        | { expectedOrigin?: string }
+        | null;
       if (data?.expectedOrigin && resolveOrigin(ctx.origin) !== data.expectedOrigin) {
         throw challengeError(`Challenge ${challengeId} was issued for a different origin`);
       }
     }
 
-    const adapter = this.adapters[challenge.factor];
-    if (!adapter) {
-      throw challengeError(`No adapter is registered for factor ${challenge.factor}`);
-    }
-
+    const adapter = this.adapters[challenge.factor] ?? this.simulated;
     const result = await adapter.verifyChallenge(response, challenge.challengeData);
-    const { verified } = result;
-    const transactionStatus = verified ? "AUTHORIZED" : "DENIED";
+    const verified = result.verified;
+    const transactionStatus: VerifyChallengeResponse["transactionStatus"] = verified
+      ? "AUTHORIZED"
+      : "DENIED";
     const verifiedAt = now.toISOString();
 
     const apply = this.db.transaction(() => {
@@ -193,28 +186,72 @@ export class ChallengeService {
       if (!consumed) {
         throw challengeError(`Challenge ${challengeId} has already been consumed`);
       }
-      // Advance the WebAuthn signature counter in the same transaction that
-      // consumes the challenge (replay protection is one atomic state change).
-      if (verified && result.credentialId && typeof result.newCounter === "number") {
-        this.passkeys.updateCounter(result.credentialId, result.newCounter);
-      }
       const decision = this.decisions.findById(challenge.decisionId);
       if (decision) {
-        this.transactions.updateStatus(
-          decision.transactionId,
-          transactionStatus
+        this.transactions.updateStatus(decision.transactionId, transactionStatus);
+        this.appendChallengeTrace(
+          challenge.decisionId,
+          "OUTCOME",
+          verified ? "challenge_verified" : "challenge_denied",
+          { challengeId, factor: challenge.factor, verified, transactionStatus }
         );
-        this.audit.insert({
-          decisionId: challenge.decisionId,
-          eventType: "CHALLENGE_VERIFIED",
-          reasonCode: verified ? "challenge_verified" : "challenge_failed",
-          details: { challengeId, factor: challenge.factor, verified, transactionStatus },
-          createdAt: verifiedAt,
-        });
       }
     });
     apply();
 
     return { challengeId, verified, transactionStatus };
+  }
+
+  /** Append a CHALLENGE/OUTCOME phase event to the decision's trace. */
+  private appendChallengeTrace(
+    decisionId: string,
+    phase: "CHALLENGE" | "OUTCOME",
+    explanationCode: string,
+    _details: Record<string, unknown>
+  ): void {
+    const current = this.decisions.findById(decisionId);
+    if (!current) return;
+    const nextSequence =
+      current.trace.reduce((max, e) => Math.max(max, e.sequence), -1) + 1;
+    const event = {
+      id: `tr_ch_${newId("").slice(4)}`,
+      phase,
+      ruleId: explanationCode,
+      ruleVersion: current.policy.version,
+      inputRefs: [decisionId],
+      outputRefs: [],
+      explanationCode,
+      sequence: nextSequence,
+    };
+    // Persist directly; DecisionRepository re-reads the full graph on demand.
+    this.db
+      .prepare(
+        `INSERT INTO trace_events (decision_id, event_id, phase, rule_id, rule_version,
+           input_refs_json, output_refs_json, explanation_code, sequence)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        decisionId,
+        event.id,
+        event.phase,
+        event.ruleId,
+        event.ruleVersion,
+        JSON.stringify(event.inputRefs),
+        JSON.stringify(event.outputRefs),
+        event.explanationCode,
+        event.sequence
+      );
+  }
+}
+
+/** Normalize an Origin header to its scheme+host:port form. */
+function resolveOrigin(rawOrigin: string | undefined): string {
+  const origin = rawOrigin?.trim() ?? "";
+  if (!origin) return "";
+  try {
+    const url = new URL(origin);
+    return url.origin;
+  } catch {
+    return origin;
   }
 }

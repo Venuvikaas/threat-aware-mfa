@@ -1,13 +1,12 @@
 /**
- * Challenge routes (docs/EXECUTION_new.md Phase 6/7).
+ * Challenge routes (EXECUTION_new2.md §5.3, Phase 4).
  *
- * POST /api/v1/challenges                 create a challenge for an allowed factor
- * POST /api/v1/challenges/:id/verify      verify a one-time expiring challenge
+ * POST /api/v1/challenges                  create a challenge for an eligible factor
+ * POST /api/v1/challenges/:id/verify       verify a one-time expiring challenge
  *
  * The verify request body carries `challengeId` per the frozen contract; the
  * URL segment must match it. The request Origin header is forwarded to the
- * factor adapter so a WebAuthn ceremony binds to the exact demo origin — and
- * WEBAUTHN challenges must be verified from the origin they were issued for.
+ * factor adapter for WebAuthn binding.
  */
 import { Router } from "express";
 import { zCreateChallengeRequest, zVerifyChallengeRequest } from "@mfa/contracts";

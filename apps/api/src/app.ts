@@ -1,11 +1,10 @@
 /**
- * Express application factory (EXECUTION_new2.md Phase 3).
+ * Express application factory (EXECUTION_new2.md Phase 3/4).
  *
  * `createApp` receives its dependencies (database handle + demo mode) so
- * tests can inject an in-memory database. Hardening carried over from the
- * prior build: payload size limit, rate limiting on critical endpoints, CORS
- * restricted to the configured frontend origin, and correlation IDs on every
- * request and error response.
+ * tests can inject an in-memory database. Hardening: payload size limit, rate
+ * limiting on critical endpoints, CORS restricted to the configured frontend
+ * origin, and correlation IDs on every request and error response.
  */
 import cors from "cors";
 import express from "express";
@@ -14,8 +13,10 @@ import { ERROR_CODES } from "@mfa/contracts";
 import type { Db } from "./db/connection.js";
 import { correlationMiddleware } from "./middleware/correlation.js";
 import { ApiError, errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+import { createChallengeRoutes } from "./routes/challengeRoutes.js";
 import { createDecisionRoutes } from "./routes/decisionRoutes.js";
 import { createDemoRoutes } from "./routes/demoRoutes.js";
+import { createPasskeyRoutes } from "./routes/passkeyRoutes.js";
 
 export interface AppDeps {
   db: Db;
@@ -40,8 +41,6 @@ export function createApp(deps: AppDeps): express.Express {
   app.use(correlationMiddleware);
   app.use(
     cors({
-      // Only the configured frontend origin is allowed; requests without an
-      // Origin header (curl, same-origin) are permitted.
       origin: (origin, callback) => {
         if (!origin || origin === allowedOrigin) {
           callback(null, true);
@@ -93,7 +92,12 @@ export function createApp(deps: AppDeps): express.Express {
   });
 
   app.use("/api/v1/decisions", criticalLimiter);
+  app.use("/api/v1/challenges", criticalLimiter);
+  app.use("/api/v1/passkeys", criticalLimiter);
+
   app.use("/api/v1/decisions", createDecisionRoutes({ db: deps.db, demoMode }));
+  app.use("/api/v1/challenges", createChallengeRoutes({ db: deps.db, demoMode }));
+  app.use("/api/v1/passkeys", createPasskeyRoutes({ db: deps.db, demoMode }));
   app.use("/api/v1/demo", createDemoRoutes({ db: deps.db, demoMode }));
 
   /* 404 + errors ----------------------------------------------------------- */
