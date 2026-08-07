@@ -14,7 +14,6 @@ import type {
   DecisionAction,
   FactorDecision,
   FactorId,
-  FactorStatus,
   RiskLevel,
   ThreatType,
 } from "@mfa/contracts";
@@ -77,10 +76,7 @@ export function evaluatePolicy(input: PolicyInput): PolicyEvaluation {
   };
 }
 
-function evaluateFactor(
-  factor: FactorId,
-  ctx: FactorContext
-): FactorDecision {
+function evaluateFactor(factor: FactorId, ctx: FactorContext): FactorDecision {
   // 1. Threat compatibility — blocked first, before any other state.
   if (factor === "SMS_OTP") {
     if (ctx.threatType === "SIM_CHANNEL_COMPROMISE") {
@@ -131,9 +127,4 @@ function evaluateFactor(
     reasonCode: "factor_eligible",
     reason: "Enrolled and above required assurance.",
   };
-}
-
-/** Status of a factor evaluation; used by callers to filter outcomes. */
-export function isAllowed(status: FactorStatus): boolean {
-  return status === "ALLOWED";
 }

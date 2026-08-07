@@ -8,7 +8,6 @@
 import { describe, expect, it } from "vitest";
 import {
   evaluatePolicy,
-  isAllowed,
   type PolicyEvaluation,
 } from "../src/policyEngine.js";
 import type { FactorDecision } from "@mfa/contracts";
@@ -115,7 +114,11 @@ describe("evaluatePolicy — insufficient evidence", () => {
 
 describe("factor-selection invariants", () => {
   it("never selects a blocked or unavailable factor", () => {
-    const cases: { riskLevel: "LOW" | "MEDIUM" | "HIGH"; threatType: "SIM_CHANNEL_COMPROMISE" | "PHISHING" | "INSUFFICIENT_EVIDENCE"; passkeyEnrolled: boolean }[] = [
+    const cases: {
+      riskLevel: "LOW" | "MEDIUM" | "HIGH";
+      threatType: "SIM_CHANNEL_COMPROMISE" | "PHISHING" | "INSUFFICIENT_EVIDENCE";
+      passkeyEnrolled: boolean;
+    }[] = [
       { riskLevel: "HIGH", threatType: "SIM_CHANNEL_COMPROMISE", passkeyEnrolled: true },
       { riskLevel: "HIGH", threatType: "SIM_CHANNEL_COMPROMISE", passkeyEnrolled: false },
       { riskLevel: "HIGH", threatType: "PHISHING", passkeyEnrolled: false },
@@ -146,7 +149,7 @@ describe("factor-selection invariants", () => {
       threatType: "INSUFFICIENT_EVIDENCE",
       passkeyEnrolled: true,
     });
-    const allowed = result.factors.filter((f) => isAllowed(f.status));
+    const allowed = result.factors.filter((f) => f.status === "ALLOWED");
     expect(allowed.length).toBe(2);
     expect(result.selectedFactor).toBe("PASSKEY");
   });
