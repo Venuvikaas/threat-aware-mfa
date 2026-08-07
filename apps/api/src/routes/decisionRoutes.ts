@@ -4,6 +4,7 @@
  * POST   /api/v1/decisions                 create a decision
  * GET    /api/v1/decisions/:decisionId     retrieve a persisted decision
  * GET    /api/v1/decisions/:decisionId/audit  retrieve the audit timeline
+ * GET    /api/v1/decisions/:decisionId/signals retrieve signal provenance
  */
 import { Router } from "express";
 import { zCreateDecisionRequest } from "@mfa/contracts";
@@ -31,6 +32,18 @@ export function createDecisionRoutes(deps: { db: Db; demoMode: boolean }): Route
         throw notFoundError(`Decision ${req.params.decisionId} not found`);
       }
       res.json(events);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/:decisionId/signals", (req, res, next) => {
+    try {
+      const signals = service.getSignals(req.params.decisionId);
+      if (!signals) {
+        throw notFoundError(`Decision ${req.params.decisionId} not found`);
+      }
+      res.json(signals);
     } catch (err) {
       next(err);
     }

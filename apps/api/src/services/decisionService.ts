@@ -16,7 +16,7 @@ import type { Db } from "../db/connection.js";
 import { newId } from "../lib/ids.js";
 import { conflictError, notFoundError } from "../middleware/errorHandler.js";
 import { collectSignals, DEFAULT_SIGNAL_PROVIDERS } from "../providers/mockSignalProvider.js";
-import type { SignalProvider } from "../providers/signalProvider.js";
+import type { SignalProvider, SignalValue } from "../providers/signalProvider.js";
 import { AuditRepository } from "../repositories/auditRepository.js";
 import { DecisionRepository, type DecisionRow } from "../repositories/decisionRepository.js";
 import { DeviceRepository } from "../repositories/deviceRepository.js";
@@ -242,6 +242,13 @@ export class DecisionService {
   getAudit(decisionId: string): AuditEvent[] | undefined {
     if (!this.decisions.findById(decisionId)) return undefined;
     return this.audit.listByDecision(decisionId);
+  }
+
+  /** Persisted signal provenance for a decision (synthetic disclosure). */
+  getSignals(decisionId: string): SignalValue[] | undefined {
+    const row = this.decisions.findById(decisionId);
+    if (!row) return undefined;
+    return this.signals.findByTransactionId(row.transactionId);
   }
 
   private toResponse(

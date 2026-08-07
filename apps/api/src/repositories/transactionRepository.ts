@@ -86,7 +86,7 @@ export class TransactionRepository {
 /** Normalized signal record persisted next to a transaction. */
 export interface SignalRow {
   name: string;
-  value: unknown;
+  value: boolean | number | null;
   source: string;
   synthetic: boolean;
   observedAt: string;
@@ -124,7 +124,7 @@ export class SignalRepository {
     }[];
     return rows.map((r) => ({
       name: r.name,
-      value: parseJson<unknown>(r.value_json),
+      value: parseJson<boolean | number | null>(r.value_json) ?? null,
       source: r.source,
       synthetic: r.synthetic === 1,
       observedAt: r.observed_at,
