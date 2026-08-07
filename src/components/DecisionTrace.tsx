@@ -3,6 +3,7 @@ import { EvidenceList } from "./EvidenceList";
 import { ThreatSummary } from "./ThreatSummary";
 import { FactorCard } from "./FactorCard";
 import { OutcomeCard } from "./OutcomeCard";
+import { CustomerOutcomePreview } from "./CustomerOutcomePreview";
 
 interface DecisionTraceProps {
   decision: Decision;
@@ -88,6 +89,7 @@ export function DecisionTrace({ decision }: DecisionTraceProps) {
         <div>
           <h3 className="trace-step-title">{STAGES[4]}</h3>
           <OutcomeCard decision={decision} />
+          <CustomerOutcomePreview decision={decision} />
         </div>
       </div>
     </div>
