@@ -17,6 +17,7 @@ import { ApiError, errorHandler, notFoundHandler } from "./middleware/errorHandl
 import { createChallengeRoutes } from "./routes/challengeRoutes.js";
 import { createDecisionRoutes } from "./routes/decisionRoutes.js";
 import { createDemoRoutes } from "./routes/demoRoutes.js";
+import { createPasskeyRoutes } from "./routes/passkeyRoutes.js";
 
 export interface AppDeps {
   db: Db;
@@ -95,8 +96,10 @@ export function createApp(deps: AppDeps): express.Express {
 
   app.use("/api/v1/decisions", criticalLimiter);
   app.use("/api/v1/challenges", criticalLimiter);
+  app.use("/api/v1/passkeys", criticalLimiter);
   app.use("/api/v1/decisions", createDecisionRoutes({ db: deps.db, demoMode }));
-  app.use("/api/v1/challenges", createChallengeRoutes({ db: deps.db }));
+  app.use("/api/v1/challenges", createChallengeRoutes({ db: deps.db, demoMode }));
+  app.use("/api/v1/passkeys", createPasskeyRoutes({ db: deps.db, demoMode }));
   app.use("/api/v1/demo", createDemoRoutes({ db: deps.db, demoMode }));
 
   /* 404 + errors ----------------------------------------------------------- */
