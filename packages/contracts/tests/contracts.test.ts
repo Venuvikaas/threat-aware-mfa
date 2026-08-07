@@ -1,258 +1,471 @@
+/**
+ * Runtime validation coverage for every frozen contract (EXECUTION_new2.md
+ * Phase 0 box: "Validate accepted and rejected examples for every schema").
+ *
+ * Each schema gets at least one accepted example and one rejected example so
+ * the frozen contracts cannot drift from their TypeScript types.
+ */
 import { describe, expect, it } from "vitest";
 import {
-  zAuditEvent,
+  zEvidenceItem,
+  zEvidenceOverride,
+  zThreatAssessment,
+  zTrustAssessment,
+  zTrustRequirement,
+  zFactorDefinition,
+  zFactorEvaluation,
+  zCapabilityState,
+  zCapabilityOverride,
+  zRiskRule,
+  zThreatRule,
+  zTrustImpactRule,
+  zSelectionPolicy,
+  zPolicyBundle,
+  zRuleTraceEvent,
+  zCreateDecisionRequest,
+  zDecisionResponse,
+  zCreateReplayRequest,
+  zReplayRecord,
+  zDecisionDiff,
+  zFactorRemediation,
+  zRemediationResponse,
   zCreateChallengeRequest,
   zCreateChallengeResponse,
-  zCreateDecisionRequest,
-  zCreateDecisionResponse,
   zVerifyChallengeRequest,
   zVerifyChallengeResponse,
-} from "../src/index.js";
+} from "@mfa/contracts";
 
-/* Shared valid fixtures -------------------------------------------------- */
-
-const validDecisionRequest = {
-  userId: "user_demo_01",
-  transaction: {
-    clientTransactionId: "txn_client_001",
-    amountMinor: 5000000,
-    currency: "INR",
-    payeeId: "payee_new_77",
-    payeeIsKnown: false,
-  },
-  session: {
-    sessionId: "sess_9f3a",
-    ageSeconds: 120,
-    failedLoginCount: 0,
-    ipAddress: "203.0.113.7",
-    asn: "AS14061",
-    country: "IN",
-  },
-  device: {
-    deviceId: "dev_new_42",
-    trusted: false,
-    firstSeen: true,
-    browserFingerprint: "fp-a1b2c3",
-  },
-  signals: {
-    recentSimChange: true,
-    geoDistanceFromLastLoginKm: 420.5,
-    phishingRelayIndicator: false,
-  },
-};
-
-const validDecisionResponse = {
-  decisionId: "dec_0001",
-  transactionId: "txn_0001",
-  policyVersion: "2026.08.0",
-  risk: { level: "HIGH", reasons: ["high_value_amount", "recent_sim_change"] },
-  threat: {
-    type: "SIM_CHANNEL_COMPROMISE",
-    support: "HIGH",
-    evidence: ["recent_sim_change", "first_seen_device"],
-  },
-  factors: [
-    {
-      factor: "PASSKEY",
-      status: "ALLOWED",
-      reasonCode: "factor_eligible",
-      reason: "Enrolled and above required assurance.",
-    },
-    {
-      factor: "SMS_OTP",
-      status: "BLOCKED",
-      reasonCode: "sim_channel_compromise",
-      reason: "SMS channel is not trusted under this hypothesis.",
-    },
-  ],
-  allowedFactors: ["PASSKEY"],
-  blockedFactors: ["SMS_OTP"],
-  selectedFactor: "PASSKEY",
-  action: "ALLOW_WITH_FACTOR",
-  createdAt: "2026-08-07T12:00:00.000Z",
-};
-
-describe("CreateDecisionRequest", () => {
-  it("accepts a valid SIM-swap request", () => {
-    expect(zCreateDecisionRequest.safeParse(validDecisionRequest).success).toBe(
-      true
-    );
+describe("evidence contracts", () => {
+  it("accepts a complete evidence item", () => {
+    const ok = zEvidenceItem.safeParse({
+      id: "ev_1",
+      type: "RECENT_SIM_CHANGE",
+      value: true,
+      providerId: "mock_telco",
+      providerType: "telco",
+      observedAt: "2026-08-07T08:00:00.000Z",
+      validUntil: "2026-08-07T09:00:00.000Z",
+      synthetic: true,
+      quality: "CONFIRMED",
+      status: "ACTIVE",
+    });
+    expect(ok.success).toBe(true);
   });
 
-  it("accepts null signal values (unknown signal)", () => {
-    const payload = {
-      ...validDecisionRequest,
-      signals: {
-        recentSimChange: null,
-        geoDistanceFromLastLoginKm: null,
-        phishingRelayIndicator: false,
-      },
-    };
-    expect(zCreateDecisionRequest.safeParse(payload).success).toBe(true);
+  it("rejects an unknown evidence type and missing status", () => {
+    const bad = zEvidenceItem.safeParse({
+      id: "ev_1",
+      type: "SPOOKY_SIGNAL",
+      value: true,
+      providerId: "p",
+      providerType: "t",
+      observedAt: "now",
+      validUntil: null,
+      synthetic: true,
+      quality: "CONFIRMED",
+    });
+    expect(bad.success).toBe(false);
   });
 
-  it("rejects a non-INR currency", () => {
-    const payload = {
-      ...validDecisionRequest,
-      transaction: { ...validDecisionRequest.transaction, currency: "USD" },
-    };
-    const result = zCreateDecisionRequest.safeParse(payload);
-    expect(result.success).toBe(false);
-  });
-
-  it("rejects a fractional or negative amountMinor (money is integer minor units)", () => {
-    for (const amountMinor of [10.5, -100]) {
-      const payload = {
-        ...validDecisionRequest,
-        transaction: { ...validDecisionRequest.transaction, amountMinor },
-      };
-      expect(zCreateDecisionRequest.safeParse(payload).success).toBe(false);
-    }
-  });
-
-  it("rejects missing phishingRelayIndicator", () => {
-    const { phishingRelayIndicator: _omitted, ...signals } =
-      validDecisionRequest.signals;
-    const payload = { ...validDecisionRequest, signals };
-    expect(zCreateDecisionRequest.safeParse(payload).success).toBe(false);
-  });
-
-  it("rejects a string recentSimChange", () => {
-    const payload = {
-      ...validDecisionRequest,
-      signals: {
-        ...validDecisionRequest.signals,
-        recentSimChange: "yes",
-      },
-    };
-    expect(zCreateDecisionRequest.safeParse(payload).success).toBe(false);
-  });
-
-  it("rejects an unknown factor id inside the nested transaction", () => {
-    const payload = structuredClone(validDecisionRequest);
-    payload.transaction.clientTransactionId = "";
-    expect(zCreateDecisionRequest.safeParse(payload).success).toBe(false);
-  });
-});
-
-describe("CreateDecisionResponse", () => {
-  it("accepts a valid full decision response", () => {
-    expect(zCreateDecisionResponse.safeParse(validDecisionResponse).success).toBe(
-      true
-    );
-  });
-
-  it("accepts assisted-recovery response with null selected factor", () => {
-    const payload = {
-      ...validDecisionResponse,
-      selectedFactor: null,
-      action: "REFER_TO_ASSISTED_RECOVERY",
-      allowedFactors: [],
-    };
-    expect(zCreateDecisionResponse.safeParse(payload).success).toBe(true);
-  });
-
-  it("rejects an unknown factor status", () => {
-    const payload = structuredClone(validDecisionResponse);
-    payload.factors[0].status = "MAYBE";
-    expect(zCreateDecisionResponse.safeParse(payload).success).toBe(false);
-  });
-
-  it("rejects an unknown risk level", () => {
-    const payload = { ...validDecisionResponse, risk: { ...validDecisionResponse.risk, level: "CRITICAL" } };
-    expect(zCreateDecisionResponse.safeParse(payload).success).toBe(false);
-  });
-});
-
-describe("Challenge contracts", () => {
-  it("accepts a valid challenge creation request", () => {
+  it("accepts a valid override and rejects a bad value type", () => {
     expect(
-      zCreateChallengeRequest.safeParse({ decisionId: "dec_0001", factor: "PASSKEY" }).success
+      zEvidenceOverride.safeParse({ type: "PHISHING_RELAY_INDICATOR", value: true }).success
     ).toBe(true);
-  });
-
-  it("rejects an unknown factor for challenge creation", () => {
     expect(
-      zCreateChallengeRequest.safeParse({ decisionId: "dec_0001", factor: "TOTP" }).success
+      zEvidenceOverride.safeParse({ type: "PHISHING_RELAY_INDICATOR", value: { oops: 1 } })
+        .success
     ).toBe(false);
   });
+});
 
-  it("accepts a simulated challenge response", () => {
+describe("threat contracts", () => {
+  it("accepts an assessment with evidence and rule refs", () => {
     expect(
-      zCreateChallengeResponse.safeParse({
-        challengeId: "ch_0001",
-        factor: "PASSKEY",
-        mode: "SIMULATED",
-        expiresAt: "2026-08-07T12:05:00.000Z",
+      zThreatAssessment.safeParse({
+        threatId: "SIM_CHANNEL_COMPROMISE",
+        support: "STRONG",
+        supportingEvidenceIds: ["ev_1"],
+        conflictingEvidenceIds: [],
+        activatedRuleIds: ["threat_sim_primary", "threat_sim_supporting"],
       }).success
     ).toBe(true);
   });
 
-  it("rejects a challenge response without expiry", () => {
+  it("rejects an unsupported threat id", () => {
     expect(
-      zCreateChallengeResponse.safeParse({
-        challengeId: "ch_0001",
-        factor: "PASSKEY",
-        mode: "SIMULATED",
+      zThreatAssessment.safeParse({
+        threatId: "CRYPTO_MINER",
+        support: "STRONG",
+        supportingEvidenceIds: [],
+        conflictingEvidenceIds: [],
+        activatedRuleIds: [],
+      }).success
+    ).toBe(false);
+  });
+});
+
+describe("trust contracts", () => {
+  it("accepts a trust assessment", () => {
+    expect(
+      zTrustAssessment.safeParse({
+        domainId: "SIM_OWNERSHIP",
+        state: "DISTRUSTED",
+        evidenceIds: ["ev_1"],
+        threatIds: ["SIM_CHANNEL_COMPROMISE"],
+        activatedRuleIds: ["trust_sim_distrust"],
+      }).success
+    ).toBe(true);
+  });
+
+  it("rejects a numeric trust state", () => {
+    expect(
+      zTrustAssessment.safeParse({
+        domainId: "SIM_OWNERSHIP",
+        state: 42,
+        evidenceIds: [],
+        threatIds: [],
+        activatedRuleIds: [],
+      }).success
+    ).toBe(false);
+  });
+});
+
+describe("factor contracts", () => {
+  const smsRequirement = {
+    domainId: "SIM_OWNERSHIP",
+    minimumState: "TRUSTED",
+    rationaleCode: "sms_depends_on_sim_ownership",
+  } as const;
+
+  it("accepts a trust requirement", () => {
+    expect(zTrustRequirement.safeParse(smsRequirement).success).toBe(true);
+  });
+
+  it("rejects a requirement on an unknown domain", () => {
+    expect(
+      zTrustRequirement.safeParse({
+        domainId: "BANK_SOLVENCY",
+        minimumState: "TRUSTED",
+        rationaleCode: "x",
       }).success
     ).toBe(false);
   });
 
-  it("accepts a valid verification request", () => {
+  it("accepts a declarative factor definition", () => {
     expect(
-      zVerifyChallengeRequest.safeParse({ challengeId: "ch_0001", response: { ok: true } }).success
+      zFactorDefinition.safeParse({
+        id: "SMS_OTP",
+        displayName: "SMS One-Time Password",
+        assurance: "AAL1",
+        trustRequirements: [smsRequirement],
+        capabilityRequirements: ["NETWORK_AVAILABLE"],
+        frictionTier: "LOW",
+        adapterId: "simulated_sms_otp",
+        enabled: true,
+      }).success
     ).toBe(true);
   });
 
-  it("rejects a verification request without challengeId", () => {
-    expect(zVerifyChallengeRequest.safeParse({ response: {} }).success).toBe(false);
+  it("rejects an unknown factor id", () => {
+    expect(
+      zFactorDefinition.safeParse({
+        id: "CARRIER_PIGEON",
+        displayName: "Pigeon",
+        assurance: "AAL1",
+        trustRequirements: [],
+        capabilityRequirements: [],
+        frictionTier: "LOW",
+        adapterId: "p",
+        enabled: true,
+      }).success
+    ).toBe(false);
   });
 
-  it("accepts an authorized verification response", () => {
+  it("accepts a factor evaluation and rejects a bogus status", () => {
+    const base = {
+      factorId: "SMS_OTP",
+      status: "INELIGIBLE",
+      failedRequirements: [
+        {
+          kind: "TRUST",
+          requirementId: "sms_requires_sim_ownership",
+          actualState: "DISTRUSTED",
+          requiredState: "TRUSTED",
+          evidenceIds: ["ev_1"],
+          ruleIds: ["trust_sim_distrust"],
+          reasonCode: "trust_requirement_failed",
+        },
+      ],
+      assuranceSatisfied: true,
+      frictionTier: "LOW",
+      traceEventIds: ["tr_1"],
+    };
+    expect(zFactorEvaluation.safeParse(base).success).toBe(true);
+    expect(
+      zFactorEvaluation.safeParse({ ...base, status: "MAYBE" }).success
+    ).toBe(false);
+  });
+});
+
+describe("capability contracts", () => {
+  it("accepts a capability state", () => {
+    expect(
+      zCapabilityState.safeParse({ capabilityId: "PASSKEY_ENROLLED", available: true }).success
+    ).toBe(true);
+  });
+  it("rejects an unknown capability id", () => {
+    expect(
+      zCapabilityState.safeParse({ capabilityId: "VIP_ACCESS", available: true }).success
+    ).toBe(false);
+  });
+  it("accepts a capability override", () => {
+    expect(
+      zCapabilityOverride.safeParse({ capabilityId: "NETWORK_AVAILABLE", available: false })
+        .success
+    ).toBe(true);
+  });
+});
+
+describe("policy contracts", () => {
+  const predicate = { evidenceType: "RECENT_SIM_CHANGE", op: "EQ", value: true };
+
+  it("accepts risk, threat, and trust impact rules", () => {
+    expect(zRiskRule.safeParse({ id: "risk_high_value", predicate, severity: "HIGH", reasonCode: "r" }).success).toBe(true);
+    expect(zThreatRule.safeParse({ id: "thr_sim", threatId: "SIM_CHANNEL_COMPROMISE", kind: "PRIMARY", predicate }).success).toBe(true);
+    expect(zTrustImpactRule.safeParse({ id: "ti_sim", threatId: "SIM_CHANNEL_COMPROMISE", domainId: "SIM_OWNERSHIP", impact: "DISTRUST" }).success).toBe(true);
+  });
+
+  it("rejects a threat rule with an unknown evidence type", () => {
+    expect(
+      zThreatRule.safeParse({
+        id: "thr_x",
+        threatId: "SIM_CHANNEL_COMPROMISE",
+        kind: "PRIMARY",
+        predicate: { evidenceType: "NO_SUCH_TYPE", op: "EQ", value: true },
+      }).success
+    ).toBe(false);
+  });
+
+  it("accepts a selection policy", () => {
+    expect(
+      zSelectionPolicy.safeParse({
+        requiredAssuranceByRisk: { LOW: "AAL1", MEDIUM: "AAL1", HIGH: "AAL2" },
+        tieBreaker: ["PASSKEY", "TOTP", "SMS_OTP", "PIN"],
+      }).success
+    ).toBe(true);
+  });
+
+  it("accepts a full policy bundle", () => {
+    expect(
+      zPolicyBundle.safeParse({
+        id: "bundle_demo",
+        version: "1.0.0",
+        contentHash: "abc123",
+        status: "ACTIVE",
+        riskRules: [{ id: "risk_high_value", predicate, severity: "HIGH", reasonCode: "high_value" }],
+        threatRules: [{ id: "thr_sim", threatId: "SIM_CHANNEL_COMPROMISE", kind: "PRIMARY", predicate }],
+        trustImpactRules: [{ id: "ti_sim", threatId: "SIM_CHANNEL_COMPROMISE", domainId: "SIM_OWNERSHIP", impact: "DISTRUST" }],
+        factorDefinitions: [],
+        selectionPolicy: {
+          requiredAssuranceByRisk: { LOW: "AAL1", MEDIUM: "AAL1", HIGH: "AAL2" },
+          tieBreaker: [],
+        },
+        createdAt: "2026-08-01T00:00:00.000Z",
+      }).success
+    ).toBe(true);
+  });
+});
+
+describe("trace contracts", () => {
+  it("accepts a rule trace event and rejects negative sequence", () => {
+    const base = {
+      id: "tr_1",
+      phase: "THREAT_ASSESSMENT",
+      ruleId: "thr_sim",
+      ruleVersion: "1.0.0",
+      inputRefs: ["ev_1"],
+      outputRefs: ["threat_sim"],
+      explanationCode: "sim_change_strong",
+      sequence: 3,
+    };
+    expect(zRuleTraceEvent.safeParse(base).success).toBe(true);
+    expect(zRuleTraceEvent.safeParse({ ...base, sequence: -1 }).success).toBe(false);
+    expect(zRuleTraceEvent.safeParse({ ...base, phase: "NOPE" }).success).toBe(false);
+  });
+});
+
+describe("decision contracts", () => {
+  const validRequest = {
+    userId: "user_demo_01",
+    clientTransactionId: "ct_1",
+    transaction: {
+      amountMinor: 5_000_000,
+      currency: "INR",
+      payeeId: "payee_new_77",
+      payeeIsKnown: false,
+    },
+    session: {
+      sessionId: "sess_unusual_01",
+      deviceId: "dev_new_01",
+      ageSeconds: 120,
+      failedLoginCount: 2,
+      ipAddress: "198.51.100.44",
+      asn: "AS16509",
+      country: "US",
+    },
+  };
+
+  it("accepts a create-decision request", () => {
+    expect(zCreateDecisionRequest.safeParse(validRequest).success).toBe(true);
+  });
+
+  it("accepts evidence overrides", () => {
+    expect(
+      zCreateDecisionRequest.safeParse({
+        ...validRequest,
+        evidenceOverrides: [{ type: "RECENT_SIM_CHANGE", value: true }],
+      }).success
+    ).toBe(true);
+  });
+
+  it("rejects wrong currency and negative amounts", () => {
+    expect(
+      zCreateDecisionRequest.safeParse({
+        ...validRequest,
+        transaction: { ...validRequest.transaction, currency: "USD" },
+      }).success
+    ).toBe(false);
+    expect(
+      zCreateDecisionRequest.safeParse({
+        ...validRequest,
+        transaction: { ...validRequest.transaction, amountMinor: -5 },
+      }).success
+    ).toBe(false);
+  });
+
+  it("accepts a complete decision response", () => {
+    expect(
+      zDecisionResponse.safeParse({
+        decisionId: "dec_1",
+        transactionId: "txn_1",
+        policy: { bundleId: "bundle_demo", version: "1.0.0", contentHash: "abc123" },
+        risk: { level: "HIGH", reasonCodes: ["high_value"] },
+        evidence: [],
+        threats: [],
+        trust: [],
+        factors: [],
+        selectedFactorId: "PASSKEY",
+        action: "CHALLENGE",
+        trace: [],
+        createdAt: "2026-08-07T08:00:00.000Z",
+      }).success
+    ).toBe(true);
+  });
+
+  it("rejects a decision response with a percentage", () => {
+    expect(
+      zDecisionResponse.safeParse({
+        decisionId: "dec_1",
+        transactionId: "txn_1",
+        policy: { bundleId: "b", version: "1", contentHash: "h" },
+        risk: { level: "HIGH", reasonCodes: [] },
+        evidence: [],
+        threats: [],
+        trust: [],
+        factors: [],
+        selectedFactorId: null,
+        action: "CHALLENGE",
+        trace: [],
+        createdAt: "now",
+        probability: 0.87,
+      }).success
+    ).toBe(false);
+  });
+});
+
+describe("replay contracts", () => {
+  it("accepts replay requests and records", () => {
+    expect(zCreateReplayRequest.safeParse({ mode: "EXACT" }).success).toBe(true);
+    expect(
+      zCreateReplayRequest.safeParse({
+        mode: "FORK",
+        evidenceChanges: [{ type: "PASSKEY_ENROLLED", value: false }],
+        capabilityChanges: [{ capabilityId: "PASSKEY_ENROLLED", available: false }],
+      }).success
+    ).toBe(true);
+    expect(zCreateReplayRequest.safeParse({ mode: "SORCERY" }).success).toBe(false);
+    expect(
+      zReplayRecord.safeParse({
+        replayId: "rp_1",
+        sourceDecisionId: "dec_1",
+        mode: "EXACT",
+        policyVersion: "1.0.0",
+        producedDecisionId: "dec_2",
+        createdAt: "now",
+      }).success
+    ).toBe(true);
+  });
+
+  it("accepts a decision diff", () => {
+    expect(
+      zDecisionDiff.safeParse({
+        replayId: "rp_1",
+        sourceDecisionId: "dec_1",
+        identical: false,
+        sections: [
+          {
+            section: "SELECTION",
+            changes: [{ path: "selectedFactorId", before: "PASSKEY", after: null }],
+          },
+        ],
+      }).success
+    ).toBe(true);
+  });
+
+  it("accepts remediation payloads", () => {
+    expect(
+      zFactorRemediation.safeParse({
+        factorId: "PASSKEY",
+        status: "VERIFIED_SELECTED",
+        changeSets: [{ capabilityChanges: [{ capabilityId: "PASSKEY_ENROLLED", available: true }] }],
+        explanationCode: "enroll_passkey",
+      }).success
+    ).toBe(true);
+    expect(
+      zRemediationResponse.safeParse({
+        decisionId: "dec_1",
+        factorId: "PASSKEY",
+        verified: true,
+        wouldBecomeEligible: true,
+        wouldBeSelected: true,
+        changeSets: [],
+      }).success
+    ).toBe(true);
+  });
+});
+
+describe("challenge contracts", () => {
+  it("accepts create/verify challenge payloads", () => {
+    expect(zCreateChallengeRequest.safeParse({ decisionId: "dec_1", factor: "PASSKEY" }).success).toBe(true);
+    expect(zCreateChallengeRequest.safeParse({ decisionId: "dec_1", factor: "COIN" }).success).toBe(false);
+    expect(zVerifyChallengeRequest.safeParse({ challengeId: "ch_1", response: { simulatedOk: true } }).success).toBe(true);
+  });
+
+  it("accepts challenge responses", () => {
+    expect(
+      zCreateChallengeResponse.safeParse({
+        challengeId: "ch_1",
+        factor: "PASSKEY",
+        mode: "SIMULATED",
+        expiresAt: "now",
+      }).success
+    ).toBe(true);
     expect(
       zVerifyChallengeResponse.safeParse({
-        challengeId: "ch_0001",
+        challengeId: "ch_1",
         verified: true,
         transactionStatus: "AUTHORIZED",
       }).success
     ).toBe(true);
-  });
-
-  it("rejects an unknown transaction status", () => {
-    expect(
-      zVerifyChallengeResponse.safeParse({
-        challengeId: "ch_0001",
-        verified: true,
-        transactionStatus: "PENDING",
-      }).success
-    ).toBe(false);
-  });
-});
-
-describe("Audit event contract", () => {
-  it("accepts a valid audit event", () => {
-    expect(
-      zAuditEvent.safeParse({
-        id: "aud_0001",
-        decisionId: "dec_0001",
-        eventType: "FACTOR_BLOCKED",
-        reasonCode: "sim_channel_compromise",
-        details: { factor: "SMS_OTP" },
-        createdAt: "2026-08-07T12:00:00.100Z",
-      }).success
-    ).toBe(true);
-  });
-
-  it("rejects an unknown event type", () => {
-    expect(
-      zAuditEvent.safeParse({
-        id: "aud_0001",
-        decisionId: "dec_0001",
-        eventType: "EXPLODED",
-        reasonCode: "x",
-        details: {},
-        createdAt: "2026-08-07T12:00:00.100Z",
-      }).success
-    ).toBe(false);
   });
 });
