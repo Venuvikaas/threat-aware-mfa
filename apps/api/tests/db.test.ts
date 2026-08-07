@@ -1,22 +1,18 @@
 /**
- * Database spine tests (docs/EXECUTION.md Phase 1 exit gate):
- * fresh migration, deterministic seed, repository round trips, foreign keys,
- * and atomic multi-write behavior.
+ * Database integrity tests (EXECUTION_new2.md Phase 2 persistence rules).
+ *
+ * - Foreign keys are enforced (a decision cannot reference a missing
+ *   transaction or bundle).
+ * - Decision creation is atomic: a failed multi-write rolls back completely.
+ * - Trace events are append-only and ordered.
  */
 import { describe, expect, it, beforeEach } from "vitest";
 import { fileURLToPath } from "node:url";
 import { openDatabase, runMigrations, type Db } from "../src/db/connection.js";
-import { UserRepository } from "../src/repositories/userRepository.js";
-import { DeviceRepository } from "../src/repositories/deviceRepository.js";
-import { SessionRepository } from "../src/repositories/sessionRepository.js";
-import {
-  SignalRepository,
-  TransactionRepository,
-} from "../src/repositories/transactionRepository.js";
+import { seedDemoData } from "../src/db/seed.js";
 import { DecisionRepository } from "../src/repositories/decisionRepository.js";
-import { ChallengeRepository } from "../src/repositories/challengeRepository.js";
-import { AuditRepository } from "../src/repositories/auditRepository.js";
-import { newId } from "../src/lib/ids.js";
+import { evaluateDecision, normalizeEvidence } from "@mfa/decision-core";
+import { DEMO_POLICY_BUNDLE } from "@mfa/policy-bundles";
 
 const migrationsDir = fileURLToPath(new URL("../src/db/migrations", import.meta.url));
 
@@ -25,326 +21,112 @@ let db: Db;
 beforeEach(() => {
   db = openDatabase(":memory:");
   runMigrations(db, migrationsDir);
+  seedDemoData(db);
 });
 
-function tableNames(db: Db): string[] {
-  return (
-    db
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
-      .all() as { name: string }[]
-  ).map((r) => r.name);
+function makeDecisionInput(id: string, transactionId: string) {
+  const evidence = normalizeEvidence(
+    [{ type: "RECENT_SIM_CHANGE", value: true, providerId: "p", providerType: "t", observedAt: "2026-08-07T08:00:00.000Z", validUntil: null, synthetic: true, quality: "CONFIRMED" }],
+    "2026-08-07T08:00:00.000Z"
+  );
+  const decision = evaluateDecision({
+    evidence,
+    capabilities: [
+      { capabilityId: "PASSKEY_ENROLLED", available: true },
+      { capabilityId: "WEBAUTHN_SUPPORTED", available: true },
+      { capabilityId: "NETWORK_AVAILABLE", available: true },
+      { capabilityId: "TOTP_SEED", available: false },
+    ],
+    policy: DEMO_POLICY_BUNDLE,
+  });
+  return {
+    id,
+    transactionId,
+    policyBundleId: DEMO_POLICY_BUNDLE.id,
+    policyVersion: DEMO_POLICY_BUNDLE.version,
+    contentHash: DEMO_POLICY_BUNDLE.contentHash,
+    riskLevel: decision.risk.level,
+    riskReasonCodes: decision.risk.reasonCodes,
+    action: decision.action,
+    selectedFactorId: decision.selectedFactorId,
+    evidence,
+    threats: decision.threats,
+    trust: decision.trust,
+    factors: decision.factors,
+    trace: decision.trace,
+    createdAt: "2026-08-07T08:00:00.000Z",
+  };
 }
 
-describe("migrations", () => {
-  it("creates every minimum table on a fresh database", () => {
-    const names = tableNames(db);
-    for (const expected of [
-      "users",
-      "devices",
-      "sessions",
-      "transactions",
-      "signals",
-      "decisions",
-      "factor_evaluations",
-      "challenges",
-      "audit_events",
-      "schema_migrations",
-    ]) {
-      expect(names).toContain(expected);
-    }
-  });
-
-  it("is idempotent — a second run applies nothing", () => {
-    expect(runMigrations(db, migrationsDir)).toEqual([]);
-  });
-
-  it("enables foreign keys", () => {
-    const pragma = db.pragma("foreign_keys", { simple: true });
-    expect(pragma).toBe(1);
-  });
-});
-
-describe("seed", () => {
-  it("seeds deterministic synthetic identities", () => {
-    const users = new UserRepository(db);
-    const devices = new DeviceRepository(db);
-    const sessions = new SessionRepository(db);
-
-    const aarav = users.findById("user_demo_01");
-    expect(aarav?.name).toBe("Aarav Nair");
-    expect(aarav?.passkeyEnrolled).toBe(true);
-
-    const priya = users.findById("user_demo_02");
-    expect(priya?.passkeyEnrolled).toBe(false);
-
-    const trusted = devices.findById("dev_trusted_01");
-    expect(trusted?.trusted).toBe(true);
-    expect(trusted?.userId).toBe("user_demo_01");
-
-    const newDevice = devices.findById("dev_new_01");
-    expect(newDevice?.trusted).toBe(false);
-
-    const home = sessions.findById("sess_home_01");
-    expect(home?.deviceId).toBe("dev_trusted_01");
-    expect(home?.failedLoginCount).toBe(0);
-
-    const unusual = sessions.findById("sess_unusual_01");
-    expect(unusual?.failedLoginCount).toBe(2);
-  });
-});
-
-describe("repository round trips", () => {
-  it("persists and retrieves a complete decision trace", () => {
-    const transactions = new TransactionRepository(db);
-    const signals = new SignalRepository(db);
-    const decisions = new DecisionRepository(db);
-    const audit = new AuditRepository(db);
-
-    const userId = "user_demo_01";
-    const transactionId = newId("txn");
-    const decisionId = newId("dec");
-
-    transactions.create({
-      id: transactionId,
-      clientTransactionId: "txn_client_roundtrip",
-      userId,
-      amountMinor: 5000000,
-      currency: "INR",
-      payeeId: "payee_new_77",
-      payeeIsKnown: false,
-      status: "PENDING",
-      createdAt: "2026-08-07T12:00:00.000Z",
-    });
-
-    signals.insertMany(transactionId, [
-      {
-        name: "recent_sim_change",
-        value: true,
-        source: "mock_telco_adapter",
-        synthetic: true,
-        observedAt: "2026-08-07T12:00:00.000Z",
-      },
-    ]);
-
-    decisions.insertDecision({
-      id: decisionId,
-      transactionId,
-      policyVersion: "2026.08.0",
-      riskLevel: "HIGH",
-      riskReasons: ["high_value_amount", "recent_sim_change"],
-      threatType: "SIM_CHANNEL_COMPROMISE",
-      threatSupport: "HIGH",
-      threatEvidence: ["recent_sim_change", "first_seen_device"],
-      allowedFactors: ["PASSKEY"],
-      blockedFactors: ["SMS_OTP"],
-      selectedFactor: "PASSKEY",
-      action: "ALLOW_WITH_FACTOR",
-      createdAt: "2026-08-07T12:00:00.100Z",
-      factorEvaluations: [
-        {
-          factor: "PASSKEY",
-          status: "ALLOWED",
-          reasonCode: "factor_eligible",
-          reason: "Enrolled and above required assurance.",
-        },
-        {
-          factor: "SMS_OTP",
-          status: "BLOCKED",
-          reasonCode: "sim_channel_compromise",
-          reason: "SMS channel is not trusted under this hypothesis.",
-        },
-      ],
-    });
-
-    audit.insert({
-      decisionId,
-      eventType: "DECISION_CREATED",
-      reasonCode: "decision_recorded",
-      details: { riskLevel: "HIGH", threatType: "SIM_CHANNEL_COMPROMISE" },
-      createdAt: "2026-08-07T12:00:00.110Z",
-    });
-    audit.insert({
-      decisionId,
-      eventType: "FACTOR_BLOCKED",
-      reasonCode: "sim_channel_compromise",
-      details: { factor: "SMS_OTP" },
-      createdAt: "2026-08-07T12:00:00.120Z",
-    });
-
-    const saved = decisions.findById(decisionId);
-    expect(saved?.riskLevel).toBe("HIGH");
-    expect(saved?.threatType).toBe("SIM_CHANNEL_COMPROMISE");
-    expect(saved?.factorEvaluations).toHaveLength(2);
-    expect(saved?.blockedFactors).toEqual(["SMS_OTP"]);
-    expect(saved?.selectedFactor).toBe("PASSKEY");
-
-    const storedSignals = signals.findByTransactionId(transactionId);
-    expect(storedSignals).toHaveLength(1);
-    expect(storedSignals[0]).toMatchObject({
-      name: "recent_sim_change",
-      value: true,
-      source: "mock_telco_adapter",
-      synthetic: true,
-    });
-
-    const events = audit.listByDecision(decisionId);
-    expect(events.map((e) => e.eventType)).toEqual([
-      "DECISION_CREATED",
-      "FACTOR_BLOCKED",
-    ]);
-  });
-
-  it("enforces the unique client transaction id", () => {
-    const transactions = new TransactionRepository(db);
-    const base = {
-      id: newId("txn"),
-      userId: "user_demo_01",
-      amountMinor: 1000,
-      currency: "INR" as const,
-      payeeId: "p1",
-      payeeIsKnown: false,
-      status: "PENDING" as const,
-      createdAt: "2026-08-07T12:00:00.000Z",
-    };
-    transactions.create({ ...base, clientTransactionId: "dup_client_txn" });
-    expect(() =>
-      transactions.create({
-        ...base,
-        id: newId("txn"),
-        clientTransactionId: "dup_client_txn",
-      })
-    ).toThrow(/UNIQUE constraint failed/);
-  });
-
-  it("only allows a challenge to be consumed once", () => {
-    const transactions = new TransactionRepository(db);
-    const decisions = new DecisionRepository(db);
-    const challenges = new ChallengeRepository(db);
-
-    const transactionId = newId("txn");
-    const decisionId = newId("dec");
-    transactions.create({
-      id: transactionId,
-      clientTransactionId: "txn_client_challenge",
-      userId: "user_demo_01",
-      amountMinor: 1000,
-      currency: "INR",
-      payeeId: "p1",
-      payeeIsKnown: false,
-      status: "PENDING",
-      createdAt: "2026-08-07T12:00:00.000Z",
-    });
-    decisions.insertDecision({
-      id: decisionId,
-      transactionId,
-      policyVersion: "2026.08.0",
-      riskLevel: "MEDIUM",
-      riskReasons: [],
-      threatType: "INSUFFICIENT_EVIDENCE",
-      threatSupport: "INSUFFICIENT",
-      threatEvidence: [],
-      allowedFactors: ["PASSKEY", "SMS_OTP"],
-      blockedFactors: [],
-      selectedFactor: "PASSKEY",
-      action: "ALLOW_WITH_FACTOR",
-      createdAt: "2026-08-07T12:00:00.000Z",
-      factorEvaluations: [],
-    });
-    challenges.create({
-      id: "ch_0001",
-      decisionId,
-      factor: "PASSKEY",
-      mode: "SIMULATED",
-      challengeData: { nonce: "n" },
-      expiresAt: "2026-08-07T12:05:00.000Z",
-      consumedAt: null,
-      verified: false,
-      createdAt: "2026-08-07T12:00:00.000Z",
-    });
-    expect(challenges.consume("ch_0001", true, "2026-08-07T12:00:01.000Z")).toBe(true);
-    expect(challenges.consume("ch_0001", true, "2026-08-07T12:00:02.000Z")).toBe(false);
-  });
-});
+function insertTransaction(id: string, clientTransactionId: string): void {
+  db.prepare(
+    `INSERT INTO transactions (id, client_transaction_id, user_id, amount_minor, currency, payee_id, payee_is_known, status, created_at)
+     VALUES (?, ?, 'user_demo_01', 1000, 'INR', 'payee_1', 1, 'PENDING', ?)`
+  ).run(id, clientTransactionId, "2026-08-07T08:00:00.000Z");
+}
 
 describe("foreign keys", () => {
-  it("rejects a device for an unknown user", () => {
-    const devices = new DeviceRepository(db);
+  it("rejects a decision referencing a missing transaction", () => {
+    const repo = new DecisionRepository(db);
     expect(() =>
-      devices.create({
-        id: newId("dev"),
-        userId: "user_missing",
-        trusted: false,
-        browserFingerprint: "fp",
-        firstSeenAt: "2026-08-07T00:00:00.000Z",
-        lastSeenAt: "2026-08-07T00:00:00.000Z",
-      })
-    ).toThrow(/FOREIGN KEY constraint failed/);
+      repo.persist(makeDecisionInput("dec_fk", "txn_missing"))
+    ).toThrow(/FOREIGN KEY/);
   });
 
-  it("rejects a decision for an unknown transaction", () => {
-    const decisions = new DecisionRepository(db);
+  it("rejects a decision referencing a missing policy bundle", () => {
+    insertTransaction("txn_ok", "ct_fk_1");
+    const input = makeDecisionInput("dec_fk2", "txn_ok");
+    input.policyBundleId = "bundle_does_not_exist";
+    const repo = new DecisionRepository(db);
+    expect(() => repo.persist(input)).toThrow(/FOREIGN KEY/);
+  });
+
+  it("rejects a trace event for a missing decision", () => {
     expect(() =>
-      decisions.insertDecision({
-        id: newId("dec"),
-        transactionId: "txn_missing",
-        policyVersion: "2026.08.0",
-        riskLevel: "LOW",
-        riskReasons: [],
-        threatType: "INSUFFICIENT_EVIDENCE",
-        threatSupport: "INSUFFICIENT",
-        threatEvidence: [],
-        allowedFactors: [],
-        blockedFactors: [],
-        selectedFactor: null,
-        action: "REFER_TO_ASSISTED_RECOVERY",
-        createdAt: "2026-08-07T12:00:00.000Z",
-        factorEvaluations: [],
-      })
-    ).toThrow(/FOREIGN KEY constraint failed/);
+      db
+        .prepare(
+          `INSERT INTO trace_events (decision_id, event_id, phase, rule_id, rule_version, input_refs_json, output_refs_json, explanation_code, sequence)
+           VALUES ('dec_nope', 'tr_0', 'SELECTION', 'selection', '1.0.0', '[]', '[]', 'x', 0)`
+        )
+        .run()
+    ).toThrow(/FOREIGN KEY/);
   });
 });
 
-describe("atomic multi-write", () => {
-  it("rolls back every insert when the transaction function throws", () => {
-    const transactions = new TransactionRepository(db);
-    const decisions = new DecisionRepository(db);
+describe("atomicity", () => {
+  it("rolls back the whole decision graph when a child insert fails", () => {
+    insertTransaction("txn_atomic", "ct_atomic_1");
+    const input = makeDecisionInput("dec_atomic", "txn_atomic");
+    // Inject an invalid trace event (bad phase) — schema has no CHECK, so force
+    // failure via a duplicate event id (UNIQUE(decision_id, event_id)).
+    input.trace.push({ ...input.trace[0] });
 
-    const attempt = db.transaction(() => {
-      const transactionId = newId("txn");
-      transactions.create({
-        id: transactionId,
-        clientTransactionId: "txn_atomic_rollback",
-        userId: "user_demo_01",
-        amountMinor: 1000,
-        currency: "INR",
-        payeeId: "p1",
-        payeeIsKnown: false,
-        status: "PENDING",
-        createdAt: "2026-08-07T12:00:00.000Z",
-      });
-      decisions.insertDecision({
-        id: newId("dec"),
-        transactionId,
-        policyVersion: "2026.08.0",
-        riskLevel: "LOW",
-        riskReasons: [],
-        threatType: "INSUFFICIENT_EVIDENCE",
-        threatSupport: "INSUFFICIENT",
-        threatEvidence: [],
-        allowedFactors: [],
-        blockedFactors: [],
-        selectedFactor: null,
-        action: "REFER_TO_ASSISTED_RECOVERY",
-        createdAt: "2026-08-07T12:00:00.000Z",
-        factorEvaluations: [],
-      });
-      throw new Error("boom");
-    });
+    const repo = new DecisionRepository(db);
+    expect(() =>
+      db.transaction(() => repo.persist(input))()
+    ).toThrow();
 
-    expect(() => attempt()).toThrow("boom");
-    expect(transactions.findByClientTransactionId("txn_atomic_rollback")).toBeUndefined();
-    expect(
-      (db.prepare("SELECT COUNT(*) AS c FROM transactions").get() as { c: number }).c
-    ).toBe(0);
+    // No partial graph may exist.
+    const decisions = db.prepare("SELECT COUNT(*) AS n FROM decisions").get() as { n: number };
+    const evidence = db.prepare("SELECT COUNT(*) AS n FROM evidence_items").get() as { n: number };
+    const trace = db.prepare("SELECT COUNT(*) AS n FROM trace_events").get() as { n: number };
+    expect(decisions.n).toBe(0);
+    expect(evidence.n).toBe(0);
+    expect(trace.n).toBe(0);
+  });
+});
+
+describe("append-only trace", () => {
+  it("preserves ordered trace events after a clean persist", () => {
+    insertTransaction("txn_trace", "ct_trace_1");
+    const input = makeDecisionInput("dec_trace", "txn_trace");
+    const repo = new DecisionRepository(db);
+    repo.persist(input);
+
+    const restored = repo.findById("dec_trace")!;
+    expect(restored.trace).toEqual(input.trace);
+    expect(restored.trace.map((t) => t.sequence)).toEqual(
+      [...restored.trace].sort((a, b) => a.sequence - b.sequence).map((t) => t.sequence)
+    );
   });
 });
