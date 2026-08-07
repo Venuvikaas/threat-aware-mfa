@@ -563,14 +563,14 @@ Rules:
 
 ---
 
-## ☐ PHASE 4 - Harden the judged path 🔴 BLOCKING
+## ☑ PHASE 4 - Harden the judged path 🔴 BLOCKING
 
 ### Product integrity
 
-- [ ] **[DOCS]** Search UI copy for prohibited claims from Part 1.  
+- [x] **[DOCS]** Search UI copy for prohibited claims from Part 1.  
   Commit: `docs: enforce prototype claim discipline`
 
-- [ ] **[DEV]** Add visible labels:
+- [x] **[DEV]** Add visible labels:
   - `Synthetic indicators`
   - `Deterministic demonstration policy`
   - policy version
@@ -578,55 +578,55 @@ Rules:
   
   Commit: `feat(ui): disclose simulation boundaries`
 
-- [ ] **[TEST]** Verify no unsupported evidence creates a confident decision.  
+- [x] **[TEST]** Verify no unsupported evidence creates a confident decision.  
   Commit: `test: verify conservative unknown handling`
 
 ### UI resilience
 
-- [ ] **[DEV]** Add safe rendering for empty evidence, unknown reason code, and missing factor metadata.  
+- [x] **[DEV]** Add safe rendering for empty evidence, unknown reason code, and missing factor metadata.  
   Commit: `fix(ui): add defensive decision rendering`
 
-- [ ] **[DEV]** Ensure factor state is never communicated through color alone.  
+- [x] **[DEV]** Ensure factor state is never communicated through color alone.  
   Commit: `fix(ui): add accessible state labels`
 
-- [ ] **[DEV]** Ensure the two-column layout becomes a readable single column on narrow screens.  
+- [x] **[DEV]** Ensure the two-column layout becomes a readable single column on narrow screens.  
   Commit: `style(ui): add responsive comparison layout`
 
-- [ ] **[DEV]** Prevent long reason text from overflowing cards.  
+- [x] **[DEV]** Prevent long reason text from overflowing cards.  
   Commit: `fix(ui): contain decision trace content`
 
 ### Automated gate
 
-- [ ] **[DEV]** Configure `npm run check` to run type-check, tests, and production build.  
+- [x] **[DEV]** Configure `npm run check` to run type-check, tests, and production build.  
   Commit: `chore: add full project check`
 
-- [ ] **[TEST]** Run `npm run check` from a clean checkout state.  
+- [x] **[TEST]** Run `npm run check` from a clean checkout state.  
   Commit: `test: pass full project check`
 
-- [ ] **[TEST]** Verify the built application runs without a network connection.  
+- [x] **[TEST]** Verify the built application runs without a network connection.  
   Commit: `test: verify offline demo path`
 
 ### Manual smoke sequence
 
-- [ ] Launch the app.
-- [ ] Confirm both scenarios load with identical scalar risk.
-- [ ] Confirm the hypotheses differ.
-- [ ] Confirm SMS has a different exclusion reason in each panel.
-- [ ] Confirm passkey is selected by default.
-- [ ] Toggle passkey off on the SIM-swap panel.
-- [ ] Confirm the hypothesis remains SIM-channel compromise.
-- [ ] Confirm assisted recovery becomes the outcome.
-- [ ] Reset.
-- [ ] Confirm all default values return.
-- [ ] Refresh.
-- [ ] Confirm the deterministic default view returns.
+- [x] Launch the app.
+- [x] Confirm both scenarios load with identical scalar risk.
+- [x] Confirm the hypotheses differ.
+- [x] Confirm SMS has a different exclusion reason in each panel.
+- [x] Confirm passkey is selected by default.
+- [x] Toggle passkey off on the SIM-swap panel.
+- [x] Confirm the hypothesis remains SIM-channel compromise.
+- [x] Confirm assisted recovery becomes the outcome.
+- [x] Reset.
+- [x] Confirm all default values return.
+- [x] Refresh.
+- [x] Confirm the deterministic default view returns.
 
 ### Exit gate
 
-- [ ] `npm run check` passes.
-- [ ] Manual smoke sequence passes without browser prompts or network calls.
-- [ ] No prohibited claim appears in the UI.
-- [ ] The entire judged path works using preset controls only.
+- [x] `npm run check` passes.
+- [x] Manual smoke sequence passes without browser prompts or network calls.
+- [x] No prohibited claim appears in the UI.
+- [x] The entire judged path works using preset controls only.
 
 ---
 
