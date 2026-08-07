@@ -1,0 +1,27 @@
+{
+  "name": "threat-aware-mfa",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Threat-Aware MFA Policy Simulator - a frontend-only deterministic policy decision demo",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.5",
+    "vitest": "^3.0.5"
+  }
+}
