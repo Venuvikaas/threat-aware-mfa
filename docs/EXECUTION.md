@@ -734,20 +734,20 @@ Do not begin this section until every Phase 0 to Phase 6 exit gate passes.
 
 ## ☐ OPTIONAL A - Export decision JSON 🟡 OPTIONAL
 
-- [ ] **[DEV]** Add a copy or download action for the current `Decision` object.  
+- [x] **[DEV]** Add a copy or download action for the current `Decision` object.  
   Commit: `feat(ui): export decision json`
 
-- [ ] **[TEST]** Verify export exactly matches the engine output and contains no UI-only fields.  
+- [x] **[TEST]** Verify export exactly matches the engine output and contains no UI-only fields.  
   Commit: `test(ui): verify decision export`
 
 - ✂ KILL if browser download behavior distracts from the primary demo.
 
 ## ☐ OPTIONAL B - Customer outcome preview 🟡 OPTIONAL
 
-- [ ] **[DEV]** Add a compact preview labeled `Simulated customer message`.  
+- [x] **[DEV]** Add a compact preview labeled `Simulated customer message`.  
   Commit: `feat(ui): add simulated customer outcome`
 
-- [ ] **[TEST]** Ensure it displays only:
+- [x] **[TEST]** Ensure it displays only:
   - `Use your passkey to authorize this payment`, or
   - `Payment paused. Continue through assisted recovery.`
   
@@ -757,7 +757,7 @@ Do not begin this section until every Phase 0 to Phase 6 exit gate passes.
 
 ## ☐ OPTIONAL C - Keyboard demo controls 🟡 OPTIONAL
 
-- [ ] **[DEV]** Add shortcuts for reset and passkey toggle only if discoverability remains clear.  
+- [x] **[DEV]** Add shortcuts for reset and passkey toggle only if discoverability remains clear.  
   Commit: `feat(ui): add demo keyboard controls`
 
 - ✂ KILL if shortcuts create accidental state changes during recording.

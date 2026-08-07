@@ -145,3 +145,15 @@ Reason: Components contain no decision logic — they render the `Decision` obje
 Rejected: Adding @testing-library/jsdom component tests for the demo path.
 
 Consequence: Interactive behavior is verified by the automated browser smoke runs recorded in this log, not by a jsdom test suite.
+
+---
+
+## Optional features shipped (post-mandatory-path)
+
+Decision: All three Part 4 optional features were implemented after the mandatory Phase 0-6 gates passed: decision JSON export (copy-to-clipboard, no download), simulated customer outcome preview (two approved messages only), and keyboard demo controls (1/2 toggle passkey, R reset).
+
+Reason: Each reinforces the demo without adding a dependency or a failure mode; export reinforces the embeddable-policy idea, the preview clarifies the customer-visible outcome, and keyboard controls keep the presenter's hands near the keyboard.
+
+Rejected: File-download export (distracts from the demo), any additional keyboard shortcuts beyond the three, and making the preview look like live authentication.
+
+Consequence: The demo path still makes zero network requests; the export writes only the exact engine `Decision` object.
