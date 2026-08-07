@@ -502,14 +502,14 @@ Rules:
 
 ---
 
-## ☐ PHASE 3 - Build the hero comparison 🔴 BLOCKING
+## ☑ PHASE 3 - Build the hero comparison 🔴 BLOCKING
 
 ### Phishing scenario
 
-- [ ] **[DEV]** Create the phishing-relay fixture with the same aggregate risk, required assurance, transaction amount, and payee sensitivity as the SIM-swap fixture.  
+- [x] **[DEV]** Create the phishing-relay fixture with the same aggregate risk, required assurance, transaction amount, and payee sensitivity as the SIM-swap fixture.  
   Commit: `feat(scenario): add phishing fixture`
 
-- [ ] **[TEST]** Assert the phishing fixture produces:
+- [x] **[TEST]** Assert the phishing fixture produces:
   - `phishing`,
   - phishing-specific evidence,
   - SMS OTP excluded with a phishing-specific reason,
@@ -519,16 +519,16 @@ Rules:
 
 ### Comparison workspace
 
-- [ ] **[DEV]** Build `SharedRiskHeader` to make the shared risk and assurance requirement visually explicit.  
+- [x] **[DEV]** Build `SharedRiskHeader` to make the shared risk and assurance requirement visually explicit.  
   Commit: `feat(ui): show shared scalar risk`
 
-- [ ] **[DEV]** Build the two-column `ComparisonWorkspace`.  
+- [x] **[DEV]** Build the two-column `ComparisonWorkspace`.  
   Commit: `feat(ui): add side by side comparison`
 
-- [ ] **[DEV]** Highlight only the evidence and exclusion rationale that differs between panels.  
+- [x] **[DEV]** Highlight only the evidence and exclusion rationale that differs between panels.  
   Commit: `feat(ui): emphasize threat difference`
 
-- [ ] **[DEV]** Add a compact five-stage trace to each panel:
+- [x] **[DEV]** Add a compact five-stage trace to each panel:
   1. Observed
   2. Suspected
   3. Do not trust
@@ -537,29 +537,29 @@ Rules:
   
   Commit: `feat(ui): add five stage decision trace`
 
-- [ ] **[TEST]** Verify both scenarios show equal aggregate risk and distinct hypothesis-specific reasons.  
+- [x] **[TEST]** Verify both scenarios show equal aggregate risk and distinct hypothesis-specific reasons.  
   Commit: `test(ui): verify same risk comparison`
 
 ### Fair scalar baseline
 
-- [ ] **[DEV]** Implement a pure scalar baseline that accepts only risk and required assurance.  
+- [x] **[DEV]** Implement a pure scalar baseline that accepts only risk and required assurance.  
   Output for both scenarios: `phishing-resistant factor required`.
   
   Commit: `feat(engine): add fair scalar baseline`
 
-- [ ] **[TEST]** Prove the baseline receives no threat indicators.  
+- [x] **[TEST]** Prove the baseline receives no threat indicators.  
   Commit: `test(engine): constrain baseline inputs`
 
-- [ ] **[DEV]** Render the baseline as a compact shared card, not as a competing full panel.  
+- [x] **[DEV]** Render the baseline as a compact shared card, not as a competing full panel.  
   Commit: `feat(ui): render scalar baseline`
 
 ### Exit gate
 
-- [ ] Default launch shows the full hero comparison.
-- [ ] Same risk is visually obvious.
-- [ ] Different evidence and exclusion reasons are visually obvious.
-- [ ] The baseline is fair and does not intentionally select an unsafe method.
-- [ ] A viewer can understand the core contrast without opening another screen.
+- [x] Default launch shows the full hero comparison.
+- [x] Same risk is visually obvious.
+- [x] Different evidence and exclusion reasons are visually obvious.
+- [x] The baseline is fair and does not intentionally select an unsafe method.
+- [x] A viewer can understand the core contrast without opening another screen.
 
 ---
 
