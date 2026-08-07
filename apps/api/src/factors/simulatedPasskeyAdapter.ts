@@ -1,35 +1,37 @@
 /**
- * Simulated passkey adapter (docs/EXECUTION.md Phase 6).
+ * Simulated passkey adapter (docs/EXECUTION_new.md Phase 6).
  *
  * Explicitly labeled SIMULATED. The client must submit `{ simulatedOk: true }`
  * to authorize — anything else is treated as a denied verification. This is
  * the required fallback that demonstrates the adapter boundary without a real
- * WebAuthn ceremony.
+ * WebAuthn ceremony. In Phase 7 the WebAuthn adapter falls back to this
+ * adapter automatically (and visibly, through the challenge `mode`) whenever
+ * a real ceremony is not possible.
  */
 import type { FactorId } from "@mfa/contracts";
-import type { CreateChallengeResult, FactorAdapter } from "./factorAdapter.js";
 import { randomUUID } from "node:crypto";
+import type {
+  ChallengeContext,
+  CreateChallengeResult,
+  FactorAdapter,
+  VerifyChallengeResult,
+} from "./factorAdapter.js";
 
 export class SimulatedPasskeyAdapter implements FactorAdapter {
   readonly factor: FactorId = "PASSKEY";
 
-  createChallenge(): CreateChallengeResult {
+  async createChallenge(_context: ChallengeContext): Promise<CreateChallengeResult> {
     return {
       mode: "SIMULATED",
       challengeData: { nonce: randomUUID(), simulated: true },
     };
   }
 
-  verifyChallenge(
+  async verifyChallenge(
     response: unknown,
     _challengeData: unknown
-  ): { verified: boolean } {
+  ): Promise<VerifyChallengeResult> {
     const body = response as { simulatedOk?: unknown } | null;
     return { verified: body?.simulatedOk === true };
   }
 }
-
-/** Adapters registered per factor; only the simulated passkey ships in the demo. */
-export const FACTOR_ADAPTERS: Partial<Record<FactorId, FactorAdapter>> = {
-  PASSKEY: new SimulatedPasskeyAdapter(),
-};
