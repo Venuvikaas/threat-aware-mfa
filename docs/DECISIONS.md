@@ -241,3 +241,15 @@ Reason: The adapter contract, challenge lifecycle, replay safety, and audit trai
 Rejected: Shipping a half-configured WebAuthn path that could break the presentation environment.
 
 Consequence: The factor execution step is visibly labeled as simulated.
+
+---
+
+## Real WebAuthn with labeled automatic fallback (Phase 7)
+
+Decision: Ship real WebAuthn (SimpleWebAuthn server + browser) for passkey registration and authentication, with the simulated adapter as an automatic, clearly labeled fallback. The PASSKEY factor adapter runs a real ceremony only when the user has a registered credential **and** the request origin is a WebAuthn-capable secure context (https or localhost); otherwise it returns the simulated adapter's `SIMULATED` mode, and the challenge response's `mode` field plus the UI make that choice explicit. This supersedes the earlier "Simulated passkey adapter only (no real WebAuthn)" entry.
+
+Reason: The stretch phase's exit gate requires "registration and authentication work on the exact demo origin" and "the simulated adapter remains a clearly labeled fallback". Deriving the RP id and expected origin from the request `Origin` header (default `http://localhost:5173`) makes the ceremony bind to whatever host the demo is presented from; the fallback rule means a non-secure demo host, an unenrolled user, or a browser without WebAuthn degrades to the labeled simulated path instead of breaking the demo. Public credential data only (id, COSE public key, counter, transports) is persisted; verification enforces challenge, origin, RP id, and credential ownership and advances the counter against replay.
+
+Rejected: Shipping WebAuthn that required changing the demo host, browser profile, or critical-path contracts; accepting `{ simulatedOk: true }` on a real WEBAUTHN challenge (that would let API readers bypass the ceremony); and deleting the simulated adapter. One additive, optional request field was added to the frozen contract: `preferSimulated` on `POST /api/v1/challenges`, a demo-only hint rejected outside demo mode that lets the UI offer the labeled fallback when a browser ceremony cannot complete.
+
+Consequence: Registration and authentication are demo-gated (the only users are synthetic). If the ceremony is unstable in the exact presentation environment, the kill criteria still apply — nothing in the decision, persistence, or audit path depends on the browser ceremony.

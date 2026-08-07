@@ -12,7 +12,8 @@ npm run dev      # API on :4000, client on http://localhost:5173
 
 Confirm the header shows **API online**, the two hero cards (**SIM swap**,
 **Phishing relay**) are visible, and the customer is **Aarav Nair (passkey
-enrolled)**.
+enrolled)**. Check the **Real passkey · WebAuthn** panel: on `localhost` it
+should say **WebAuthn available on this origin**.
 
 ## The sequence
 
@@ -67,9 +68,22 @@ On the SIM-swap panel click **Try SMS_OTP (blocked)**. The client calls
 
 ### 6. Execute the selected factor
 
-Click **Continue with PASSKEY** → **Verify with simulated passkey**. Show the
-SIMULATED label, then the transaction **AUTHORIZED** and the new
+Click **Continue with PASSKEY**. The challenge response tells the client which
+path runs:
+
+- **`WEBAUTHN`** (a passkey is registered and the origin is WebAuthn-capable):
+  click **Verify with passkey (WebAuthn)** and complete the browser prompt —
+  a real ceremony. The chip reads **REAL PASSKEY · WEBAUTHN**.
+- **`SIMULATED`** (no credential yet, or a non-secure origin): click **Verify
+  with simulated passkey** — the chip reads **SIMULATED · labeled demo
+  fallback**.
+
+Either way, show the transaction **AUTHORIZED** and the new
 `CHALLENGE_CREATED → CHALLENGE_VERIFIED` audit events.
+
+Optional: enroll a real passkey first via the **Real passkey · WebAuthn**
+panel (**Enroll passkey**), then rerun — the chip flips to **WEBAUTHN** and a
+real ceremony runs.
 
 ### 7. The conservative fallback
 
@@ -80,8 +94,9 @@ channel.
 
 ### 8. Reset
 
-Click **Reset demo**; the database returns to its deterministic seed and the
-panels clear. Refresh the page — everything reloads from the backend.
+Click **Reset demo**; the database returns to its deterministic seed (including
+clearing any registered passkeys) and the panels clear. Refresh the page —
+everything reloads from the backend.
 
 ## Closing
 
@@ -92,6 +107,8 @@ panels clear. Refresh the page — everything reloads from the backend.
 ## Claim boundaries to respect
 
 - All signals are **synthetic demo data** from mock provider adapters.
-- The passkey path is a **labeled simulated adapter**, not real WebAuthn.
+- The passkey path is **real WebAuthn** only when a credential is registered
+  on a WebAuthn-capable origin; otherwise it is the **labeled simulated
+  adapter** — the challenge `mode` field always says which.
 - Support bands are deterministic policy output, not calibrated probabilities.
 - No live carrier, bank, UPI, or telecom integration exists.

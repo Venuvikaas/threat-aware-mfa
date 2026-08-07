@@ -32,8 +32,10 @@ distrusted.
 3. Stores the transaction, normalized signals (with provenance), decision,
    factor evaluations, and audit events **atomically** in SQLite.
 4. Lets the React client submit transactions, inspect decisions, compare the
-   two hero scenarios, and complete the selected factor through a **clearly
-   labeled simulated passkey adapter**.
+   two hero scenarios, and complete the selected factor through a **real
+   WebAuthn passkey ceremony** when a credential is registered — otherwise
+   through a **clearly labeled simulated passkey adapter** (automatic
+   fallback, never hidden).
 5. Enforces policy at the API boundary: a blocked or unavailable factor can
    never create a challenge — even with a direct API call.
 
@@ -65,7 +67,8 @@ Backend API (apps/api)
    │  → one SQLite transaction
    ▼
 SQLite  users · devices · sessions · transactions · signals · decisions ·
-        factor_evaluations · challenges · audit_events
+        factor_evaluations · challenges · audit_events ·
+        passkey_credentials (public data only) · passkey_registrations
 ```
 
 ## Setup
@@ -82,7 +85,7 @@ Open http://localhost:5173. The Vite dev server proxies `/api` to the API.
 Quality gates:
 
 ```bash
-npm run check        # typecheck + 108 unit/API tests + production build
+npm run check        # typecheck + 125 unit/API tests + production build
 npm run smoke        # end-to-end demo path: PASS/FAIL on a fresh database
 npm run db:migrate   # apply SQL migrations to data/threat-aware-mfa.db
 ```
@@ -99,11 +102,26 @@ npm run db:migrate   # apply SQL migrations to data/threat-aware-mfa.db
    banner; the scalar baseline shows the shared severity-only requirement.
 6. Try **SMS OTP (blocked)** — the API rejects the challenge with
    `POLICY_REJECTION` (the enforcement proof).
-7. **Continue with passkey** — create and verify a SIMULATED challenge, watch
-   the transaction authorize, and see `CHALLENGE_VERIFIED` in the audit trail.
+7. **Continue with passkey** — the challenge comes back `WEBAUTHN` when a real
+   credential is registered (run the browser ceremony) or `SIMULATED` (the
+   labeled fallback). Watch the transaction authorize and `CHALLENGE_VERIFIED`
+   land in the audit trail.
 8. Switch the customer to one without a passkey and rerun — the service
    returns **assisted recovery** instead of falling back to SMS.
 9. Reset with one click; the database returns to the deterministic seed.
+
+### Real WebAuthn (Phase 7 stretch)
+
+- **Enroll passkey** runs a real registration ceremony and persists only
+  public credential data (credential id, COSE public key, counter, transports).
+- Challenge creation runs a real ceremony **only** when the user has a
+  registered credential and the origin is a WebAuthn-capable secure context
+  (https or localhost). Otherwise the PASSKEY adapter automatically returns
+  the labeled `SIMULATED` fallback — the challenge `mode` field makes the
+  choice explicit, and the UI labels it.
+- Registration and authentication are demo-gated and bound to the exact
+  request origin (RP id derived from the `Origin` header, default
+  `http://localhost:5173`).
 
 See `docs/demo-script.md` for the full script and `docs/API.md` for the
 endpoints.
@@ -114,8 +132,11 @@ endpoints.
 - No live carrier, UPI, Account Aggregator, IP-reputation, or device-risk
   integration — providers are deterministic mock adapters behind a real
   contract (`docs/signal-seams.md` documents where real adapters connect).
-- No real SMS delivery and no real WebAuthn — the factor path is a labeled
-  simulated adapter (real WebAuthn is a stretch phase with kill criteria).
+- No real SMS delivery, and no production passkey infrastructure: WebAuthn
+  runs on the demo origin for the demo users, with the simulated adapter as
+  the clearly labeled automatic fallback (docs/EXECUTION.md Phase 7 kill
+  criteria honored — the decision, persistence, and audit path never depend on
+  the browser ceremony).
 - No calibrated probabilities — support bands only.
 - No claims of compliance or production readiness.
 
@@ -126,6 +147,8 @@ endpoints.
   one-time, expiring, and replay-safe.
 - Decision creation, challenge verification, and demo reset are each atomic
   database transactions; the audit log is append-only through application code.
+- WebAuthn verification enforces challenge, origin, relying-party id, and
+  credential ownership; signature counters advance to defeat replay.
 - Payload limits, rate limiting, CORS restricted to the configured origin,
   and correlation IDs on requests and errors (docs/EXECUTION.md Phase 8).
 - No OTPs, passkey private keys, biometric data, or secrets are ever stored.

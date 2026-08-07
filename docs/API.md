@@ -8,9 +8,10 @@ against the frozen Zod schemas in `packages/contracts/src/index.ts`
 (docs/EXECUTION.md PART 3). Money is integer minor units (paise for INR).
 
 Hardening (docs/EXECUTION.md Phase 8): request bodies are limited to 32 KB,
-`POST /api/v1/decisions` and `POST /api/v1/challenges` are rate-limited
-(60/minute by default), and CORS is restricted to the configured frontend
-origin (`CORS_ORIGIN`, default `http://localhost:5173`).
+`POST /api/v1/decisions`, `POST /api/v1/challenges`, and
+`POST /api/v1/passkeys/*` are rate-limited (60/minute by default), and CORS is
+restricted to the configured frontend origin (`CORS_ORIGIN`, default
+`http://localhost:5173`).
 
 ---
 
@@ -38,7 +39,7 @@ present, otherwise generated per request.
 | `NOT_FOUND` | 404 | Decision, challenge, user, or route does not exist |
 | `CONFLICT` | 409 | Duplicate client transaction ID rejected |
 | `POLICY_REJECTION` | 409 | Requested factor is blocked or unavailable for the decision |
-| `CHALLENGE_ERROR` | 409 | Challenge missing, expired, consumed, or replay attempted |
+| `CHALLENGE_ERROR` | 409 | Challenge or registration ceremony missing, expired, consumed, or replay attempted |
 | `PAYLOAD_TOO_LARGE` | 413 | Body exceeded the 32 KB limit |
 | `RATE_LIMITED` | 429 | Too many requests to a limited endpoint |
 | `INTERNAL_ERROR` | 500 | Unhandled server failure |
@@ -92,7 +93,7 @@ Response `201`:
   "threat": { "type": "SIM_CHANNEL_COMPROMISE", "support": "HIGH", "evidence": ["recent_sim_change", "first_seen_device", "new_payee"] },
   "factors": [
     { "factor": "PASSKEY", "status": "ALLOWED", "reasonCode": "factor_eligible", "reason": "Enrolled and above required assurance." },
-    { "factor": "SMS_OTP", "status": "BLOCKED", "reasonCode": "sim_channel_compromise", "reason": "SMS channel is not trusted under the SIM-channel-compromise hypothesis." }
+    { "factor": "SMS_OTP", "status": "BLOCKED", "reasonCode": "sms_channel_untrusted", "reason": "SMS channel is not trusted under the SIM-channel-compromise hypothesis." }
   ],
   "allowedFactors": ["PASSKEY"],
   "blockedFactors": ["SMS_OTP"],
@@ -117,7 +118,7 @@ Ordered audit events for a decision (append-only, insertion order).
 ```json
 [
   { "id": "aud_0001", "decisionId": "dec_0001", "eventType": "DECISION_CREATED", "reasonCode": "decision_recorded", "details": { "riskLevel": "HIGH", "threatType": "SIM_CHANNEL_COMPROMISE" }, "createdAt": "2026-08-07T12:00:00.100Z" },
-  { "id": "aud_0002", "decisionId": "dec_0001", "eventType": "FACTOR_BLOCKED", "reasonCode": "sim_channel_compromise", "details": { "factor": "SMS_OTP" }, "createdAt": "2026-08-07T12:00:00.110Z" }
+  { "id": "aud_0002", "decisionId": "dec_0001", "eventType": "FACTOR_BLOCKED", "reasonCode": "sms_channel_untrusted", "details": { "factor": "SMS_OTP" }, "createdAt": "2026-08-07T12:00:00.110Z" }
 ]
 ```
 
@@ -141,11 +142,27 @@ point.
 { "decisionId": "dec_0001", "factor": "PASSKEY" }
 ```
 
-Response `201`:
+Optional Phase 7 field: `"preferSimulated": true` forces the labeled
+SIMULATED challenge even when a real WebAuthn ceremony would be possible (the
+demo fallback affordance). It is rejected with `400` outside demo mode and
+never bypasses factor policy.
+
+Response `201` — `mode` tells the client exactly which execution path runs:
 
 ```json
 { "challengeId": "ch_0001", "factor": "PASSKEY", "mode": "SIMULATED", "expiresAt": "2026-08-07T12:05:00.000Z" }
 ```
+
+- `mode: "SIMULATED"` — the labeled simulated adapter (no real ceremony).
+- `mode: "WEBAUTHN"` — a real WebAuthn ceremony; `publicOptions` carries the
+  `PublicKeyCredentialRequestOptionsJSON` for the browser.
+
+Mode selection (PASSKEY): the server runs a real WebAuthn ceremony only when
+the user has a registered credential **and** the request origin is a
+WebAuthn-capable secure context (https or localhost); otherwise it
+automatically returns the labeled SIMULATED fallback. RP id and expected
+origin are derived from the request `Origin` header so the ceremony binds to
+the exact demo origin.
 
 Errors: `400 VALIDATION_ERROR`, `404 NOT_FOUND` (decision),
 `409 POLICY_REJECTION` (blocked or unavailable factor), `429 RATE_LIMITED`.
@@ -156,9 +173,16 @@ Verify a challenge. Rejects missing, expired, consumed, and
 decision-mismatched challenges; marks the challenge consumed and updates the
 transaction state in the same database transaction.
 
+SIMULATED challenge — the client submits the simulated verdict:
+
 ```json
 { "challengeId": "ch_0001", "response": { "simulatedOk": true } }
 ```
+
+WEBAUTHN challenge — the client submits the `AuthenticationResponseJSON`
+returned by the browser ceremony (`startAuthentication`); the server verifies
+challenge, origin, relying-party id, credential ownership, and advances the
+signature counter.
 
 Response `200`:
 
@@ -166,18 +190,61 @@ Response `200`:
 { "challengeId": "ch_0001", "verified": true, "transactionStatus": "AUTHORIZED" }
 ```
 
-A `simulatedOk: false` response verifies to `verified: false` /
+A failed ceremony or `simulatedOk: false` verifies to `verified: false` /
 `transactionStatus: "DENIED"`. Errors: `400 VALIDATION_ERROR`,
 `409 CHALLENGE_ERROR` (missing, expired, consumed, or replay).
+
+### Passkey registration (demo mode)
+
+A real WebAuthn registration ceremony for a synthetic demo user. Disabled
+(`403 DEMO_MODE_DISABLED`) outside demo mode.
+
+**`POST /api/v1/passkeys/register/options`** — begin registration.
+
+```json
+{ "userId": "user_demo_01" }
+```
+
+Response `201`:
+
+```json
+{
+  "ceremonyId": "reg_0001",
+  "options": {
+    "challenge": "base64url…",
+    "rp": { "name": "Threat-Aware MFA", "id": "localhost" },
+    "user": { "id": "base64url…", "name": "Aarav Nair", "displayName": "Aarav Nair" },
+    "pubKeyCredParams": [ { "type": "public-key", "alg": -7 }, { "type": "public-key", "alg": -257 } ],
+    "authenticatorSelection": { "residentKey": "discouraged", "userVerification": "preferred" }
+  }
+}
+```
+
+The ceremony is persisted server-side (challenge, expected origin, rp id) and
+must be consumed once within 5 minutes.
+
+**`POST /api/v1/passkeys/register/verify`** — verify the browser attestation
+and persist the public credential.
+
+```json
+{ "ceremonyId": "reg_0001", "response": { /* RegistrationResponseJSON from startRegistration */ } }
+```
+
+Response `200`: `{ "credentialId": "base64url…", "registered": true, "passkeyEnrolled": true }`.
+
+Only public credential data is stored (credential id, COSE public key,
+counter, transports). Errors: `400 VALIDATION_ERROR`, `404 NOT_FOUND` (user or
+ceremony), `409 CHALLENGE_ERROR` (verification failed, expired, consumed, or
+replay).
 
 ### Demo endpoints (disabled outside demo mode)
 
 | endpoint | purpose |
 |---|---|
-| `GET /api/v1/demo/users` | synthetic identity presets (users, devices, passkey enrollment) |
+| `GET /api/v1/demo/users` | synthetic identity presets (users, devices, passkey enrollment, registered passkey ids) |
 | `GET /api/v1/demo/baseline?riskLevel=LOW\|MEDIUM\|HIGH` | fair scalar baseline — a function of risk level only |
 | `POST /api/v1/demo/users/:userId/passkey-enrollment` `{ "enrolled": false }` | toggle passkey enrollment (demo recovery flow) |
-| `POST /api/v1/demo/reset` | reset only synthetic demo transactions/decisions; `403` outside demo mode |
+| `POST /api/v1/demo/reset` | reset synthetic transactions/decisions/challenges and passkey credentials + ceremonies; `403` outside demo mode |
 
 ---
 
@@ -192,3 +259,4 @@ A `simulatedOk: false` response verifies to `verified: false` /
 - Repeated use of the same client transaction ID must not create conflicting decisions.
 - Every decision stores policy version and normalized evidence.
 - Synthetic provider data is tagged as synthetic in storage and in the UI.
+- Passkey storage holds public credential data only — never private keys.
