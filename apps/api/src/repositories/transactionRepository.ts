@@ -1,10 +1,11 @@
 /**
- * Transaction persistence. The client transaction ID is unique so a repeated
- * request cannot silently create a conflicting decision (docs/EXECUTION.md
- * PART 3 idempotency rule).
+ * Transaction persistence (EXECUTION_new2.md Phase 2).
+ *
+ * The client transaction ID is unique so a repeated request cannot silently
+ * create a conflicting decision (idempotency). Raw signal rows are replaced
+ * by evidence items bound to the decision.
  */
 import type { Db } from "../db/connection.js";
-import { parseJson } from "../lib/ids.js";
 
 export type TransactionStatus = "PENDING" | "AUTHORIZED" | "DENIED" | "PENDING_RECOVERY";
 
@@ -57,9 +58,9 @@ export class TransactionRepository {
   }
 
   findById(id: string): TransactionRow | undefined {
-    const row = this.db
-      .prepare("SELECT * FROM transactions WHERE id = ?")
-      .get(id) as TransactionRecord | undefined;
+    const row = this.db.prepare("SELECT * FROM transactions WHERE id = ?").get(id) as
+      | TransactionRecord
+      | undefined;
     return row ? toTransaction(row) : undefined;
   }
 
@@ -71,63 +72,11 @@ export class TransactionRepository {
          VALUES (@id, @clientTransactionId, @userId, @amountMinor, @currency,
            @payeeId, @payeeIsKnown, @status, @createdAt)`
       )
-      .run({
-        ...input,
-        payeeIsKnown: input.payeeIsKnown ? 1 : 0,
-      });
+      .run({ ...input, payeeIsKnown: input.payeeIsKnown ? 1 : 0 });
     return input;
   }
 
   updateStatus(id: string, status: TransactionStatus): void {
     this.db.prepare("UPDATE transactions SET status = ? WHERE id = ?").run(status, id);
-  }
-}
-
-/** Normalized signal record persisted next to a transaction. */
-export interface SignalRow {
-  name: string;
-  value: boolean | number | null;
-  source: string;
-  synthetic: boolean;
-  observedAt: string;
-}
-
-export class SignalRepository {
-  constructor(private readonly db: Db) {}
-
-  insertMany(transactionId: string, signals: SignalRow[]): void {
-    const stmt = this.db.prepare(
-      `INSERT INTO signals (transaction_id, name, value_json, source, synthetic, observed_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    );
-    for (const s of signals) {
-      stmt.run(
-        transactionId,
-        s.name,
-        JSON.stringify(s.value),
-        s.source,
-        s.synthetic ? 1 : 0,
-        s.observedAt
-      );
-    }
-  }
-
-  findByTransactionId(transactionId: string): SignalRow[] {
-    const rows = this.db
-      .prepare("SELECT * FROM signals WHERE transaction_id = ? ORDER BY id")
-      .all(transactionId) as {
-      name: string;
-      value_json: string;
-      source: string;
-      synthetic: number;
-      observed_at: string;
-    }[];
-    return rows.map((r) => ({
-      name: r.name,
-      value: parseJson<boolean | number | null>(r.value_json) ?? null,
-      source: r.source,
-      synthetic: r.synthetic === 1,
-      observedAt: r.observed_at,
-    }));
   }
 }
