@@ -3,11 +3,12 @@
  *
  * `createApp` receives its dependencies (database handle + demo mode) so
  * tests can inject an in-memory database. Routes: health, decisions + audit,
- * and demo presets/reset. Challenge routes land in Phase 6.
+ * challenges, and demo presets/reset.
  */
 import express from "express";
 import type { Db } from "./db/connection.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+import { createChallengeRoutes } from "./routes/challengeRoutes.js";
 import { createDecisionRoutes } from "./routes/decisionRoutes.js";
 import { createDemoRoutes } from "./routes/demoRoutes.js";
 
@@ -53,6 +54,7 @@ export function createApp(deps: AppDeps): express.Express {
   /* API v1 ---------------------------------------------------------------- */
 
   app.use("/api/v1/decisions", createDecisionRoutes({ db: deps.db, demoMode }));
+  app.use("/api/v1/challenges", createChallengeRoutes({ db: deps.db }));
   app.use("/api/v1/demo", createDemoRoutes({ db: deps.db, demoMode }));
 
   /* 404 + errors ----------------------------------------------------------- */
