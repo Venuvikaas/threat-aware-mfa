@@ -770,50 +770,50 @@ The project is submitted only when every item below is true.
 
 ## Product
 
-- [ ] One screen presents the complete core comparison.
-- [ ] Two scenarios share the same aggregate risk and required assurance.
-- [ ] The scenarios derive different supported threat hypotheses.
-- [ ] SMS OTP is excluded with a scenario-specific reason in both cases.
-- [ ] Passkey is selected only when compatible, enrolled, and above the assurance threshold.
-- [ ] Removing passkey enrollment produces assisted recovery, not unsafe fallback.
-- [ ] Unsupported or conflicting evidence produces insufficient evidence.
+- [x] One screen presents the complete core comparison.
+- [x] Two scenarios share the same aggregate risk and required assurance.
+- [x] The scenarios derive different supported threat hypotheses.
+- [x] SMS OTP is excluded with a scenario-specific reason in both cases.
+- [x] Passkey is selected only when compatible, enrolled, and above the assurance threshold.
+- [x] Removing passkey enrollment produces assisted recovery, not unsafe fallback.
+- [x] Unsupported or conflicting evidence produces insufficient evidence.
 
 ## Engineering
 
-- [ ] The decision engine is pure and deterministic.
-- [ ] UI components contain no duplicated policy logic.
-- [ ] Policy and scenarios are committed fixtures.
-- [ ] Every factor has exactly one state and one reason object.
-- [ ] Tests cover hero scenarios, fallback, unknown evidence, invariant enforcement, and determinism.
-- [ ] `npm run check` passes.
-- [ ] Production build works offline.
+- [x] The decision engine is pure and deterministic.
+- [x] UI components contain no duplicated policy logic.
+- [x] Policy and scenarios are committed fixtures.
+- [x] Every factor has exactly one state and one reason object.
+- [x] Tests cover hero scenarios, fallback, unknown evidence, invariant enforcement, and determinism.
+- [x] `npm run check` passes.
+- [x] Production build works offline.
 
 ## Demo
 
-- [ ] The core contrast is visible without navigation.
-- [ ] Synthetic inputs and simulated execution are disclosed.
-- [ ] The scalar baseline is fair.
-- [ ] The passkey toggle produces the wow moment reliably.
-- [ ] Reset returns the exact default state.
-- [ ] No authentication prompt, permission prompt, login, loading wait, or network request appears.
-- [ ] The 2 to 3 minute script matches the shipped product.
+- [x] The core contrast is visible without navigation.
+- [x] Synthetic inputs and simulated execution are disclosed.
+- [x] The scalar baseline is fair.
+- [x] The passkey toggle produces the wow moment reliably.
+- [x] Reset returns the exact default state.
+- [x] No authentication prompt, permission prompt, login, loading wait, or network request appears.
+- [x] The 2 to 3 minute script matches the shipped product.
 
 ## Integrity
 
-- [ ] No fake probabilities are shown.
-- [ ] No AI, fraud-detection, compliance, authentication-execution, or production-readiness overclaim appears.
-- [ ] No secrets exist in tracked files or Git history.
-- [ ] The README clearly states what the prototype does not do.
+- [x] No fake probabilities are shown.
+- [x] No AI, fraud-detection, compliance, authentication-execution, or production-readiness overclaim appears.
+- [x] No secrets exist in tracked files or Git history.
+- [x] The README clearly states what the prototype does not do.
 
 ## Submission package
 
-- [ ] `docs/PRD.md`
-- [ ] `docs/EXECUTION.md`
-- [ ] `docs/DECISIONS.md`
-- [ ] `docs/demo-script.md`
-- [ ] `README.md`
-- [ ] Tested production build
-- [ ] Demo recording or live-demo-ready local build
+- [x] `docs/PRD.md`
+- [x] `docs/EXECUTION.md`
+- [x] `docs/DECISIONS.md`
+- [x] `docs/demo-script.md`
+- [x] `README.md`
+- [x] Tested production build
+- [x] Demo recording or live-demo-ready local build
 
 ---
 
