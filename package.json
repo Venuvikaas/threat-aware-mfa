@@ -16,7 +16,8 @@
     "test": "vitest run",
     "build": "npm run build -w @mfa/web",
     "check": "npm run typecheck && npm run test && npm run build",
-    "db:migrate": "npm run db:migrate -w @mfa/api"
+    "db:migrate": "npm run db:migrate -w @mfa/api",
+    "smoke": "tsx scripts/smoke.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
