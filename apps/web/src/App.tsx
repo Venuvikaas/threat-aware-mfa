@@ -11,6 +11,7 @@ import { api, ApiError, type DemoUser } from "./lib/api";
 import { HERO_SCENARIOS } from "./lib/presets";
 import type { DecisionRecord, FormState, SlotKey } from "./types";
 import { ComparisonBanner } from "./components/ComparisonBanner";
+import { PasskeyPanel } from "./components/PasskeyPanel";
 import { DecisionPanel } from "./components/DecisionPanel";
 import { TransactionForm } from "./components/TransactionForm";
 
@@ -224,6 +225,12 @@ export function App() {
           ))}
         </div>
       </section>
+
+      <PasskeyPanel
+        userId={form.userId}
+        users={users}
+        onChanged={loadUsers}
+      />
 
       {bannerError ? (
         <div className="banner-error" role="alert">
