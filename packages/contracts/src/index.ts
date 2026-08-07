@@ -17,9 +17,10 @@ export * from "./policy.js";
 export * from "./trace.js";
 export * from "./decisions.js";
 export * from "./replay.js";
+export * from "./passkeys.js";
 
 /* ------------------------------------------------------------------ */
-/* Factor challenge (Phase 4; shape carried over from the prior build) */
+/* Factor challenge (Phase 4)                                          */
 /* ------------------------------------------------------------------ */
 
 export const zCreateChallengeRequest = z.object({
