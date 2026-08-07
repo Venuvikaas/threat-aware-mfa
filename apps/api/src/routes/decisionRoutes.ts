@@ -1,10 +1,9 @@
 /**
- * Decision routes (docs/EXECUTION.md Phase 3).
+ * Decision routes (EXECUTION_new2.md §5.1–5.2, Phase 3).
  *
- * POST   /api/v1/decisions                 create a decision
- * GET    /api/v1/decisions/:decisionId     retrieve a persisted decision
- * GET    /api/v1/decisions/:decisionId/audit  retrieve the audit timeline
- * GET    /api/v1/decisions/:decisionId/signals retrieve signal provenance
+ * POST /api/v1/decisions                       create a decision (atomic)
+ * GET  /api/v1/decisions/:decisionId           retrieve a persisted decision
+ * GET  /api/v1/decisions/:decisionId/trace     retrieve the causality trace
  */
 import { Router } from "express";
 import { zCreateDecisionRequest } from "@mfa/contracts";
@@ -25,25 +24,13 @@ export function createDecisionRoutes(deps: { db: Db; demoMode: boolean }): Route
     }
   });
 
-  router.get("/:decisionId/audit", (req, res, next) => {
+  router.get("/:decisionId/trace", (req, res, next) => {
     try {
-      const events = service.getAudit(req.params.decisionId);
-      if (!events) {
+      const trace = service.getTrace(req.params.decisionId);
+      if (!trace) {
         throw notFoundError(`Decision ${req.params.decisionId} not found`);
       }
-      res.json(events);
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  router.get("/:decisionId/signals", (req, res, next) => {
-    try {
-      const signals = service.getSignals(req.params.decisionId);
-      if (!signals) {
-        throw notFoundError(`Decision ${req.params.decisionId} not found`);
-      }
-      res.json(signals);
+      res.json(trace);
     } catch (err) {
       next(err);
     }

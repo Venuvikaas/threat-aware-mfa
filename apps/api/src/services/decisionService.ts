@@ -1,66 +1,72 @@
 /**
- * Decision service (docs/EXECUTION.md Phase 3).
+ * Decision orchestration service (EXECUTION_new2.md Phase 3).
  *
- * Orchestration: load/create synthetic demo entities, collect signals through
- * the provider boundary (with demo overrides), evaluate risk, threat, and
- * policy, then persist the transaction, signals, decision, factor
- * evaluations, and audit events atomically in one database transaction.
+ * - Collects evidence through the provider boundary (mock telecom/device/
+ *   session/geo), derives transaction-context evidence, applies demo-only
+ *   overrides, and preserves full provenance (provider id, type, observed
+ *   time, quality, synthetic status).
+ * - Loads the requested immutable policy bundle (hash-verified) or the active
+ *   one.
+ * - Runs the pure decision engine, then persists the transaction + full
+ *   decision graph atomically in one database transaction.
+ * - Enforces client-transaction idempotency (409 on duplicates).
  */
 import type {
-  AuditEvent,
   CreateDecisionRequest,
-  CreateDecisionResponse,
+  DecisionResponse,
+  EvidenceItem,
+  EvidenceOverride,
+  EvidenceType,
 } from "@mfa/contracts";
-import { DEMO_POLICY, evaluatePolicy, evaluateRisk, evaluateThreat } from "@mfa/decision-core";
+import { normalizeEvidence, evaluateDecision, type RawEvidence } from "@mfa/decision-core";
 import type { Db } from "../db/connection.js";
 import { newId } from "../lib/ids.js";
 import { conflictError, notFoundError } from "../middleware/errorHandler.js";
-import { collectSignals, DEFAULT_SIGNAL_PROVIDERS } from "../providers/mockSignalProvider.js";
-import type { SignalProvider, SignalValue } from "../providers/signalProvider.js";
-import { AuditRepository } from "../repositories/auditRepository.js";
-import { DecisionRepository, type DecisionRow } from "../repositories/decisionRepository.js";
+import { DEFAULT_EVIDENCE_PROVIDERS } from "../providers/mockSessionProvider.js";
+import type { EvidenceProvider, ProviderContext } from "../providers/evidenceProvider.js";
+import { CapabilityRepository } from "../repositories/capabilityRepository.js";
+import { DecisionRepository } from "../repositories/decisionRepository.js";
 import { DeviceRepository } from "../repositories/deviceRepository.js";
+import { PolicyRepository } from "../repositories/policyRepository.js";
 import { SessionRepository } from "../repositories/sessionRepository.js";
-import {
-  SignalRepository,
-  TransactionRepository,
-} from "../repositories/transactionRepository.js";
+import { TransactionRepository } from "../repositories/transactionRepository.js";
 import { UserRepository } from "../repositories/userRepository.js";
+
+const SIM_CHANGE_VALID_FOR_MS = 60 * 60 * 1000; // recent SIM change: 1h window
 
 export class DecisionService {
   private readonly users: UserRepository;
   private readonly devices: DeviceRepository;
   private readonly sessions: SessionRepository;
   private readonly transactions: TransactionRepository;
-  private readonly signals: SignalRepository;
   private readonly decisions: DecisionRepository;
-  private readonly audit: AuditRepository;
+  private readonly policies: PolicyRepository;
+  private readonly capabilities: CapabilityRepository;
 
   constructor(
     private readonly db: Db,
     private readonly demoMode: boolean,
-    private readonly signalProviders: SignalProvider[] = DEFAULT_SIGNAL_PROVIDERS
+    private readonly providers: EvidenceProvider[] = DEFAULT_EVIDENCE_PROVIDERS
   ) {
     this.users = new UserRepository(db);
     this.devices = new DeviceRepository(db);
     this.sessions = new SessionRepository(db);
     this.transactions = new TransactionRepository(db);
-    this.signals = new SignalRepository(db);
     this.decisions = new DecisionRepository(db);
-    this.audit = new AuditRepository(db);
+    this.policies = new PolicyRepository(db);
+    this.capabilities = new CapabilityRepository(db);
   }
 
-  createDecision(req: CreateDecisionRequest): CreateDecisionResponse {
-    const now = new Date().toISOString();
+  createDecision(req: CreateDecisionRequest): DecisionResponse {
+    const now = new Date();
+    const nowIso = now.toISOString();
 
     // Idempotency: repeated client transaction ids must not create conflicts.
-    const existingTxn = this.transactions.findByClientTransactionId(
-      req.transaction.clientTransactionId
-    );
+    const existingTxn = this.transactions.findByClientTransactionId(req.clientTransactionId);
     if (existingTxn) {
       throw conflictError("Duplicate client transaction id", {
         transactionId: existingTxn.id,
-        decisionId: this.decisions.findByTransactionId(existingTxn.id)?.id ?? null,
+        decisionId: this.decisions.findByTransactionId(existingTxn.id)?.decisionId ?? null,
       });
     }
 
@@ -69,236 +75,215 @@ export class DecisionService {
       throw notFoundError(`User ${req.userId} not found`);
     }
 
-    // Load or create synthetic demo entities.
-    this.devices.upsert({
-      id: req.device.deviceId,
+    // Load or upsert synthetic demo entities (first-seen state matters).
+    const device = this.devices.upsert({
+      id: req.session.deviceId,
       userId: req.userId,
-      trusted: req.device.trusted,
-      browserFingerprint: req.device.browserFingerprint,
-      firstSeenAt: now,
-      lastSeenAt: now,
+      trusted: false,
+      firstSeenAt: this.devices.findById(req.session.deviceId)?.firstSeenAt ?? nowIso,
+      lastSeenAt: nowIso,
     });
     this.sessions.upsert({
       id: req.session.sessionId,
       userId: req.userId,
-      deviceId: req.device.deviceId,
+      deviceId: req.session.deviceId,
       ipAddress: req.session.ipAddress,
       asn: req.session.asn,
       country: req.session.country,
-      startedAt: now,
+      startedAt: nowIso,
       failedLoginCount: req.session.failedLoginCount,
     });
 
-    // Collect signals through the provider boundary (demo overrides only in
-    // demo mode; provider failure yields an explicit unknown signal).
-    const signals = collectSignals(
-      this.signalProviders,
-      { userId: req.userId, deviceId: req.device.deviceId },
-      this.demoMode,
-      {
-        recentSimChange: req.signals.recentSimChange,
-        geoDistanceFromLastLoginKm: req.signals.geoDistanceFromLastLoginKm,
-      },
-      req.signals.phishingRelayIndicator,
-      req.device.firstSeen,
-      now
-    );
+    // Load the policy bundle: requested version (immutable) or the active one.
+    const policy = req.policyVersion
+      ? this.policies.findByVersion(req.policyVersion)
+      : this.policies.findActive();
+    if (!policy) {
+      throw notFoundError(
+        req.policyVersion
+          ? `Policy version ${req.policyVersion} not found`
+          : "No active policy bundle"
+      );
+    }
 
-    const risk = evaluateRisk({
-      amountMinor: req.transaction.amountMinor,
-      payeeIsKnown: req.transaction.payeeIsKnown,
-      firstSeen: req.device.firstSeen,
-      failedLoginCount: req.session.failedLoginCount,
-      sessionAgeSeconds: req.session.ageSeconds,
-      recentSimChange: signals.recentSimChange,
-      geoDistanceFromLastLoginKm: signals.geoDistanceFromLastLoginKm,
-      phishingRelayIndicator: signals.phishingRelayIndicator,
-    });
+    // Collect evidence with provenance.
+    const evidence = this.collectEvidence(req, device.firstSeenAt, now);
 
-    const threat = evaluateThreat({
-      recentSimChange: signals.recentSimChange,
-      phishingRelayIndicator: signals.phishingRelayIndicator,
-      firstSeen: req.device.firstSeen,
-      payeeIsKnown: req.transaction.payeeIsKnown,
-      amountMinor: req.transaction.amountMinor,
-      failedLoginCount: req.session.failedLoginCount,
-      sessionAgeSeconds: req.session.ageSeconds,
-    });
+    const capabilities = this.capabilities.findByUserId(req.userId);
+    const evaluated = evaluateDecision({ evidence, capabilities, policy });
 
-    const policy = evaluatePolicy({
-      riskLevel: risk.level,
-      threatType: threat.type,
-      passkeyEnrolled: user.passkeyEnrolled,
-    });
-
+    // Persist atomically: transaction + full decision graph.
     const transactionId = newId("txn");
     const decisionId = newId("dec");
-
     const persist = this.db.transaction(() => {
       this.transactions.create({
         id: transactionId,
-        clientTransactionId: req.transaction.clientTransactionId,
+        clientTransactionId: req.clientTransactionId,
         userId: req.userId,
         amountMinor: req.transaction.amountMinor,
         currency: req.transaction.currency,
         payeeId: req.transaction.payeeId,
         payeeIsKnown: req.transaction.payeeIsKnown,
         status: "PENDING",
-        createdAt: now,
+        createdAt: nowIso,
       });
-
-      this.signals.insertMany(transactionId, signals.list);
-
-      this.decisions.insertDecision({
+      this.decisions.persist({
         id: decisionId,
         transactionId,
-        policyVersion: DEMO_POLICY.version,
-        riskLevel: risk.level,
-        riskReasons: risk.reasons,
-        threatType: threat.type,
-        threatSupport: threat.support,
-        threatEvidence: threat.evidence,
-        allowedFactors: policy.allowedFactors,
-        blockedFactors: policy.blockedFactors,
-        selectedFactor: policy.selectedFactor,
-        action: policy.action,
-        createdAt: now,
-        factorEvaluations: policy.factors,
+        policyBundleId: policy.id,
+        policyVersion: policy.version,
+        contentHash: policy.contentHash,
+        riskLevel: evaluated.risk.level,
+        riskReasonCodes: evaluated.risk.reasonCodes,
+        action: evaluated.action,
+        selectedFactorId: evaluated.selectedFactorId,
+        evidence,
+        threats: evaluated.threats,
+        trust: evaluated.trust,
+        factors: evaluated.factors,
+        trace: evaluated.trace,
+        createdAt: nowIso,
       });
-
-      this.audit.insert({
-        decisionId,
-        eventType: "DECISION_CREATED",
-        reasonCode: "decision_recorded",
-        details: { riskLevel: risk.level, threatType: threat.type },
-        createdAt: now,
-      });
-      for (const f of policy.factors.filter((f) => f.status === "BLOCKED")) {
-        this.audit.insert({
-          decisionId,
-          eventType: "FACTOR_BLOCKED",
-          reasonCode: f.reasonCode,
-          details: { factor: f.factor },
-          createdAt: now,
-        });
-      }
-      if (policy.selectedFactor) {
-        this.audit.insert({
-          decisionId,
-          eventType: "FACTOR_SELECTED",
-          reasonCode: "factor_selected",
-          details: { factor: policy.selectedFactor },
-          createdAt: now,
-        });
-      } else {
-        this.audit.insert({
-          decisionId,
-          eventType: "RECOVERY_REQUIRED",
-          reasonCode: "assisted_recovery",
-          details: {},
-          createdAt: now,
-        });
-      }
     });
+    persist();
 
-    try {
-      persist();
-    } catch (err) {
-      // A concurrent duplicate that slipped past the pre-check (or any future
-      // async interleaving) must surface as the frozen 409 CONFLICT, never as
-      // an internal error.
-      if (isUniqueConstraintError(err)) {
-        throw conflictError("Duplicate client transaction id", {
-          clientTransactionId: req.transaction.clientTransactionId,
-        });
-      }
-      throw err;
+    return this.decisions.findById(decisionId)!;
+  }
+
+  getDecision(decisionId: string): DecisionResponse | undefined {
+    return this.decisions.findById(decisionId);
+  }
+
+  getTrace(decisionId: string): DecisionResponse["trace"] | undefined {
+    const decision = this.decisions.findById(decisionId);
+    return decision?.trace;
+  }
+
+  /**
+   * Collect and normalize evidence for a decision:
+   * provider observations + transaction-context evidence + capability
+   * evidence, then demo overrides (demo mode only).
+   */
+  private collectEvidence(
+    req: CreateDecisionRequest,
+    firstSeenAt: string,
+    now: Date
+  ): EvidenceItem[] {
+    const nowIso = now.toISOString();
+    const ctx: ProviderContext = {
+      userId: req.userId,
+      deviceId: req.session.deviceId,
+      sessionId: req.session.sessionId,
+    };
+
+    const raw: RawEvidence[] = [];
+
+    // Provider observations (mock, labeled synthetic, provenance intact).
+    for (const provider of this.providers) {
+      const observation = provider.collect(ctx);
+      raw.push({
+        type: observation.type,
+        value: observation.value,
+        providerId: observation.providerId,
+        providerType: observation.providerType,
+        observedAt: nowIso,
+        validUntil: observation.validUntil ?? null,
+        synthetic: true,
+        quality: observation.quality,
+      });
     }
 
-    return this.toResponse(
-      decisionId,
-      transactionId,
-      risk.level,
-      risk.reasons,
-      threat.type,
-      threat.support,
-      threat.evidence,
-      policy.factors,
-      policy.allowedFactors,
-      policy.blockedFactors,
-      policy.selectedFactor,
-      policy.action,
-      now
+    // Transaction-context evidence (derived from the request, not a provider).
+    raw.push(
+      {
+        type: "HIGH_VALUE_TRANSACTION",
+        value: req.transaction.amountMinor >= 5_000_000,
+        providerId: "transaction_context",
+        providerType: "transaction",
+        observedAt: nowIso,
+        validUntil: null,
+        synthetic: true,
+        quality: "CONFIRMED",
+      },
+      {
+        type: "NEW_PAYEE",
+        value: !req.transaction.payeeIsKnown,
+        providerId: "transaction_context",
+        providerType: "transaction",
+        observedAt: nowIso,
+        validUntil: null,
+        synthetic: true,
+        quality: "CONFIRMED",
+      },
+      {
+        type: "FIRST_SEEN_DEVICE",
+        value: firstSeenAt === nowIso,
+        providerId: "device_profile",
+        providerType: "device",
+        observedAt: nowIso,
+        validUntil: null,
+        synthetic: true,
+        quality: "CONFIRMED",
+      },
+      {
+        type: "FAILED_LOGIN_BURST",
+        value: req.session.failedLoginCount >= 2,
+        providerId: "session_context",
+        providerType: "session",
+        observedAt: nowIso,
+        validUntil: null,
+        synthetic: true,
+        quality: "CONFIRMED",
+      }
     );
+
+    // Capability evidence for provenance display (only evidence-modeled
+    // capabilities; the capability gate itself reads CapabilityRepository).
+    const evidenceModeled = new Set<EvidenceType>(["PASSKEY_ENROLLED", "WEBAUTHN_SUPPORTED", "NETWORK_AVAILABLE"]);
+    for (const cap of this.capabilities.findByUserId(req.userId)) {
+      if (!evidenceModeled.has(cap.capabilityId as EvidenceType)) continue;
+      raw.push({
+        type: cap.capabilityId as EvidenceType,
+        value: cap.available,
+        providerId: "user_capabilities",
+        providerType: "capability",
+        observedAt: nowIso,
+        validUntil: null,
+        synthetic: true,
+        quality: "CONFIRMED",
+      });
+    }
+
+    // Demo overrides (demo mode only) replace matching provider evidence and
+    // set a validity window for freshness demonstration.
+    if (this.demoMode && req.evidenceOverrides) {
+      this.applyOverrides(raw, req.evidenceOverrides, nowIso);
+    }
+
+    return normalizeEvidence(raw, nowIso);
   }
 
-  getDecision(decisionId: string): CreateDecisionResponse | undefined {
-    const row = this.decisions.findById(decisionId);
-    if (!row) return undefined;
-    return this.toResponse(
-      row.id,
-      row.transactionId,
-      row.riskLevel,
-      row.riskReasons,
-      row.threatType,
-      row.threatSupport,
-      row.threatEvidence,
-      row.factorEvaluations,
-      row.allowedFactors,
-      row.blockedFactors,
-      row.selectedFactor,
-      row.action,
-      row.createdAt
-    );
+  private applyOverrides(raw: RawEvidence[], overrides: EvidenceOverride[], nowIso: string): void {
+    for (const override of overrides) {
+      const index = raw.findIndex((r) => r.type === override.type);
+      const replacement: RawEvidence = {
+        type: override.type,
+        value: override.value,
+        providerId: "demo_override",
+        providerType: "demo",
+        observedAt: nowIso,
+        validUntil:
+          override.type === "RECENT_SIM_CHANGE" && override.value === true
+            ? new Date(new Date(nowIso).getTime() + SIM_CHANGE_VALID_FOR_MS).toISOString()
+            : null,
+        synthetic: true,
+        quality: "CONFIRMED",
+      };
+      if (index >= 0) {
+        raw[index] = replacement;
+      } else {
+        raw.push(replacement);
+      }
+    }
   }
-
-  getAudit(decisionId: string): AuditEvent[] | undefined {
-    if (!this.decisions.findById(decisionId)) return undefined;
-    return this.audit.listByDecision(decisionId);
-  }
-
-  /** Persisted signal provenance for a decision (synthetic disclosure). */
-  getSignals(decisionId: string): SignalValue[] | undefined {
-    const row = this.decisions.findById(decisionId);
-    if (!row) return undefined;
-    return this.signals.findByTransactionId(row.transactionId);
-  }
-
-  private toResponse(
-    decisionId: string,
-    transactionId: string,
-    riskLevel: CreateDecisionResponse["risk"]["level"],
-    riskReasons: string[],
-    threatType: CreateDecisionResponse["threat"]["type"],
-    threatSupport: CreateDecisionResponse["threat"]["support"],
-    threatEvidence: string[],
-    factors: DecisionRow["factorEvaluations"],
-    allowedFactors: CreateDecisionResponse["allowedFactors"],
-    blockedFactors: CreateDecisionResponse["blockedFactors"],
-    selectedFactor: CreateDecisionResponse["selectedFactor"],
-    action: CreateDecisionResponse["action"],
-    createdAt: string
-  ): CreateDecisionResponse {
-    return {
-      decisionId,
-      transactionId,
-      policyVersion: DEMO_POLICY.version,
-      risk: { level: riskLevel, reasons: riskReasons },
-      threat: { type: threatType, support: threatSupport, evidence: threatEvidence },
-      factors,
-      allowedFactors,
-      blockedFactors,
-      selectedFactor,
-      action,
-      createdAt,
-    };
-  }
-}
-
-function isUniqueConstraintError(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    (err as { code?: string }).code === "SQLITE_CONSTRAINT_UNIQUE"
-  );
 }

@@ -1,9 +1,9 @@
 /**
- * Express application factory for the Threat-Aware MFA Decision Service.
+ * Express application factory (EXECUTION_new2.md Phase 3).
  *
  * `createApp` receives its dependencies (database handle + demo mode) so
- * tests can inject an in-memory database. Hardening (docs/EXECUTION.md
- * Phase 8): payload size limit, rate limiting on critical endpoints, CORS
+ * tests can inject an in-memory database. Hardening carried over from the
+ * prior build: payload size limit, rate limiting on critical endpoints, CORS
  * restricted to the configured frontend origin, and correlation IDs on every
  * request and error response.
  */
@@ -14,10 +14,8 @@ import { ERROR_CODES } from "@mfa/contracts";
 import type { Db } from "./db/connection.js";
 import { correlationMiddleware } from "./middleware/correlation.js";
 import { ApiError, errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
-import { createChallengeRoutes } from "./routes/challengeRoutes.js";
 import { createDecisionRoutes } from "./routes/decisionRoutes.js";
 import { createDemoRoutes } from "./routes/demoRoutes.js";
-import { createPasskeyRoutes } from "./routes/passkeyRoutes.js";
 
 export interface AppDeps {
   db: Db;
@@ -95,11 +93,7 @@ export function createApp(deps: AppDeps): express.Express {
   });
 
   app.use("/api/v1/decisions", criticalLimiter);
-  app.use("/api/v1/challenges", criticalLimiter);
-  app.use("/api/v1/passkeys", criticalLimiter);
   app.use("/api/v1/decisions", createDecisionRoutes({ db: deps.db, demoMode }));
-  app.use("/api/v1/challenges", createChallengeRoutes({ db: deps.db, demoMode }));
-  app.use("/api/v1/passkeys", createPasskeyRoutes({ db: deps.db, demoMode }));
   app.use("/api/v1/demo", createDemoRoutes({ db: deps.db, demoMode }));
 
   /* 404 + errors ----------------------------------------------------------- */

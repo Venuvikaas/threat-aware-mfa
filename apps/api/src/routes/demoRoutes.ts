@@ -1,75 +1,24 @@
 /**
- * Demo routes (docs/EXECUTION_new.md Phase 5/9/7).
+ * Demo routes (EXECUTION_new2.md §5.6, Phase 3/9).
  *
- * GET  /api/v1/demo/users                      synthetic identity presets
- * GET  /api/v1/demo/baseline                   fair scalar baseline (risk only)
- * POST /api/v1/demo/users/:userId/passkey-enrollment  toggle enrollment (demo)
- * POST /api/v1/demo/reset                      reset only demo data (demo only)
+ * GET  /api/v1/demo/scenarios   judge presets (three deterministic scenarios)
+ * POST /api/v1/demo/reset       delete demo decisions/challenges/replays so
+ *                               the demo restarts deterministically
+ *
+ * Reset is disabled unless DEMO_MODE=true.
  */
 import { Router } from "express";
-import { RISK_LEVELS } from "@mfa/contracts";
-import { scalarBaseline } from "@mfa/decision-core";
+import { DEMO_SCENARIOS } from "@mfa/demo-data";
 import type { Db } from "../db/connection.js";
-import {
-  ApiError,
-  notFoundError,
-  validationError,
-} from "../middleware/errorHandler.js";
-import { DeviceRepository } from "../repositories/deviceRepository.js";
-import { PasskeyCredentialRepository } from "../repositories/passkeyRepository.js";
-import { UserRepository } from "../repositories/userRepository.js";
+import { ApiError } from "../middleware/errorHandler.js";
 
 export function createDemoRoutes(deps: { db: Db; demoMode: boolean }): Router {
   const router = Router();
 
-  router.get("/users", (_req, res) => {
-    const users = new UserRepository(deps.db);
-    const devices = new DeviceRepository(deps.db);
-    const passkeys = new PasskeyCredentialRepository(deps.db);
-    const rows = users.all();
+  router.get("/scenarios", (_req, res) => {
     res.json({
-      users: rows.map((u) => ({
-        id: u.id,
-        name: u.name,
-        passkeyEnrolled: u.passkeyEnrolled,
-        devices: devices.findByUserId(u.id),
-        // Real WebAuthn credentials (public data only) — drives the demo
-        // choice between a real ceremony and the labeled simulated fallback.
-        passkeys: passkeys.findByUserId(u.id).map((c) => ({
-          id: c.id,
-          createdAt: c.createdAt,
-        })),
-      })),
+      scenarios: DEMO_SCENARIOS.map(({ id, label, description }) => ({ id, label, description })),
     });
-  });
-
-  router.get("/baseline", (req, res, next) => {
-    try {
-      const level = String(req.query.riskLevel ?? "");
-      if (!RISK_LEVELS.includes(level as (typeof RISK_LEVELS)[number])) {
-        throw validationError({ riskLevel: "expected one of LOW, MEDIUM, HIGH" });
-      }
-      res.json(scalarBaseline(level as (typeof RISK_LEVELS)[number]));
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  router.post("/users/:userId/passkey-enrollment", (req, res, next) => {
-    try {
-      if (!deps.demoMode) {
-        throw new ApiError(403, "DEMO_MODE_DISABLED", "Demo toggles are disabled outside demo mode");
-      }
-      const enrolled = Boolean(req.body?.enrolled);
-      const users = new UserRepository(deps.db);
-      if (!users.findById(req.params.userId)) {
-        throw notFoundError(`User ${req.params.userId} not found`);
-      }
-      users.setPasskeyEnrolled(req.params.userId, enrolled);
-      res.json({ userId: req.params.userId, passkeyEnrolled: enrolled });
-    } catch (err) {
-      next(err);
-    }
   });
 
   router.post("/reset", (_req, res, next) => {
@@ -77,21 +26,25 @@ export function createDemoRoutes(deps: { db: Db; demoMode: boolean }): Router {
       if (!deps.demoMode) {
         throw new ApiError(403, "DEMO_MODE_DISABLED", "Demo reset is disabled outside demo mode");
       }
-      const now = new Date().toISOString();
       const reset = deps.db.transaction(() => {
         deps.db.exec(`
-          DELETE FROM audit_events;
+          DELETE FROM verified_remediations;
+          DELETE FROM decision_diffs;
+          DELETE FROM replay_changes;
+          DELETE FROM replays;
           DELETE FROM challenges;
+          DELETE FROM trace_events;
+          DELETE FROM failed_requirements;
           DELETE FROM factor_evaluations;
+          DELETE FROM trust_assessments;
+          DELETE FROM threat_assessments;
+          DELETE FROM evidence_items;
           DELETE FROM decisions;
-          DELETE FROM signals;
           DELETE FROM transactions;
-          DELETE FROM passkey_registrations;
-          DELETE FROM passkey_credentials;
         `);
       });
       reset();
-      res.json({ reset: true, at: now });
+      res.json({ reset: true, at: new Date().toISOString() });
     } catch (err) {
       next(err);
     }
