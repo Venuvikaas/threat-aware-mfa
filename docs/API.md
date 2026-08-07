@@ -1,262 +1,330 @@
-# API Reference — Threat-Aware MFA Decision Service
+# API Reference
 
-Base URL (dev): `http://localhost:4000` — the Vite dev server proxies `/api`
-and `/health` to the API on port `4000`.
+Base path: `/api/v1` unless noted. All request/response bodies are JSON.
+Errors use one frozen shape (see [Errors](#errors)).
 
-All request and response bodies are JSON. Input and output are runtime-validated
-against the frozen Zod schemas in `packages/contracts/src/index.ts`
-(docs/EXECUTION.md PART 3). Money is integer minor units (paise for INR).
+- [Health and demo](#health-and-demo)
+- [Decisions](#decisions)
+- [Challenges](#challenges)
+- [Replay and diff](#replay-and-diff)
+- [Verified remediation](#verified-remediation)
+- [Passkey enrollment (stretch)](#passkey-enrollment-stretch)
+- [Errors](#errors)
+- [Common types](#common-types)
 
-Hardening (docs/EXECUTION.md Phase 8): request bodies are limited to 32 KB,
-`POST /api/v1/decisions`, `POST /api/v1/challenges`, and
-`POST /api/v1/passkeys/*` are rate-limited (60/minute by default), and CORS is
-restricted to the configured frontend origin (`CORS_ORIGIN`, default
-`http://localhost:5173`).
-
----
-
-## Error shape
-
-Every non-2xx response uses the same shape:
-
-```json
-{
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Human-readable summary",
-    "details": { "field": "problem description" },
-    "correlationId": "x-correlation-id or generated"
-  }
-}
-```
-
-The `correlationId` is echoed from the `x-correlation-id` request header when
-present, otherwise generated per request.
-
-| code | status | meaning |
-|---|---|---|
-| `VALIDATION_ERROR` | 400 | Request body failed the frozen contract, or JSON was malformed |
-| `NOT_FOUND` | 404 | Decision, challenge, user, or route does not exist |
-| `CONFLICT` | 409 | Duplicate client transaction ID rejected |
-| `POLICY_REJECTION` | 409 | Requested factor is blocked or unavailable for the decision |
-| `CHALLENGE_ERROR` | 409 | Challenge or registration ceremony missing, expired, consumed, or replay attempted |
-| `PAYLOAD_TOO_LARGE` | 413 | Body exceeded the 32 KB limit |
-| `RATE_LIMITED` | 429 | Too many requests to a limited endpoint |
-| `INTERNAL_ERROR` | 500 | Unhandled server failure |
-
----
-
-## Endpoints
+## Health and demo
 
 ### `GET /health`
 
-Process and database health. No external checks (there are no external
-providers).
-
 ```json
-{ "status": "ok", "service": "threat-aware-mfa-api", "database": "ok", "time": "2026-08-07T12:00:00.000Z" }
+{ "status": "ok", "service": "threat-aware-mfa-api", "database": "ok", "time": "2026-08-07T08:00:00.000Z" }
 ```
 
-`503` with `database: "error"` when the database is unreachable.
+### `GET /api/v1/demo/scenarios`
+
+Judge presets. Returns the three deterministic demo scenarios with the exact
+request shape the API accepts:
+
+```json
+{
+  "scenarios": [
+    { "id": "sim_swap", "label": "₹50,000 SIM-change transfer", "description": "…" },
+    { "id": "phishing_relay", "label": "₹50,000 phishing relay", "description": "…" },
+    { "id": "constrained_capability", "label": "SIM change without a passkey", "description": "…" }
+  ]
+}
+```
+
+### `POST /api/v1/demo/reset`
+
+Deletes demo decisions, challenges, replays, remediations, and trace state so
+the demo restarts deterministically. **Disabled unless `DEMO_MODE=true`** —
+returns `403 DEMO_MODE_DISABLED` otherwise.
+
+```json
+{ "reset": true, "at": "2026-08-07T08:00:00.000Z" }
+```
+
+## Decisions
 
 ### `POST /api/v1/decisions`
 
-Create a decision for a transaction. Validates the request, loads or creates
-synthetic demo entities, normalizes and persists signals, evaluates risk,
-threat, and factors, and persists the transaction, decision, factor
-evaluations, and audit events atomically.
+Create an authentication decision. The response carries the complete reasoning
+chain: normalized evidence with provenance, independent threat assessments,
+ordinal trust states, generic factor evaluations, the selection, and the full
+structured causality trace.
+
+Request:
 
 ```json
 {
   "userId": "user_demo_01",
-  "transaction": { "clientTransactionId": "txn_client_001", "amountMinor": 5000000, "currency": "INR", "payeeId": "payee_new_77", "payeeIsKnown": false },
-  "session": { "sessionId": "sess_9f3a", "ageSeconds": 120, "failedLoginCount": 0, "ipAddress": "203.0.113.7", "asn": "AS14061", "country": "IN" },
-  "device": { "deviceId": "dev_new_42", "trusted": false, "firstSeen": true, "browserFingerprint": "fp-a1b2c3" },
-  "signals": { "recentSimChange": true, "geoDistanceFromLastLoginKm": 420.5, "phishingRelayIndicator": false }
+  "clientTransactionId": "ct_20260807_001",
+  "transaction": {
+    "amountMinor": 5000000,
+    "currency": "INR",
+    "payeeId": "payee_new_77",
+    "payeeIsKnown": false
+  },
+  "session": {
+    "sessionId": "sess_unusual_01",
+    "deviceId": "dev_new_01",
+    "ageSeconds": 120,
+    "failedLoginCount": 2,
+    "ipAddress": "198.51.100.44",
+    "asn": "AS16509",
+    "country": "US"
+  },
+  "evidenceOverrides": [
+    { "type": "RECENT_SIM_CHANGE", "value": true },
+    { "type": "HIGH_VALUE_TRANSACTION", "value": true }
+  ],
+  "policyVersion": "1.0.0"
 }
 ```
 
-`signals.recentSimChange` and `signals.geoDistanceFromLastLoginKm` accept
-`null` for an unknown signal. In demo mode, explicit request signals override
-the mock provider values (persisted as source `demo_override`); outside demo
-mode overrides are ignored. Repeating a `clientTransactionId` returns
-`409 CONFLICT` — it never silently creates a conflicting decision.
+- `evidenceOverrides` is **demo-only**: outside `DEMO_MODE=true` the API
+  returns `403 DEMO_MODE_DISABLED`.
+- `policyVersion` is optional; default is the active bundle.
+- Repeated `clientTransactionId` returns `409 CONFLICT` (idempotency).
 
-Response `201`:
+`201 Created` — response:
 
 ```json
 {
-  "decisionId": "dec_0001",
-  "transactionId": "txn_0001",
-  "policyVersion": "2026.08.0",
-  "risk": { "level": "HIGH", "reasons": ["high_value_amount", "recent_sim_change", "first_seen_device"] },
-  "threat": { "type": "SIM_CHANNEL_COMPROMISE", "support": "HIGH", "evidence": ["recent_sim_change", "first_seen_device", "new_payee"] },
-  "factors": [
-    { "factor": "PASSKEY", "status": "ALLOWED", "reasonCode": "factor_eligible", "reason": "Enrolled and above required assurance." },
-    { "factor": "SMS_OTP", "status": "BLOCKED", "reasonCode": "sms_channel_untrusted", "reason": "SMS channel is not trusted under the SIM-channel-compromise hypothesis." }
+  "decisionId": "dec_ab12cd34ef56",
+  "transactionId": "txn_78ab90cd12ef",
+  "policy": { "bundleId": "bundle_demo", "version": "1.0.0", "contentHash": "sha256:…" },
+  "risk": { "level": "HIGH", "reasonCodes": ["sim_change", "high_value"] },
+  "evidence": [
+    {
+      "id": "ev_1", "type": "RECENT_SIM_CHANGE", "value": true,
+      "providerId": "mock_telco", "providerType": "telco",
+      "observedAt": "2026-08-07T08:00:00.000Z", "validUntil": null,
+      "synthetic": true, "quality": "CONFIRMED", "status": "ACTIVE"
+    }
   ],
-  "allowedFactors": ["PASSKEY"],
-  "blockedFactors": ["SMS_OTP"],
-  "selectedFactor": "PASSKEY",
-  "action": "ALLOW_WITH_FACTOR",
-  "createdAt": "2026-08-07T12:00:00.000Z"
+  "threats": [
+    {
+      "threatId": "SIM_CHANNEL_COMPROMISE", "support": "STRONG",
+      "supportingEvidenceIds": ["ev_1", "ev_2"],
+      "conflictingEvidenceIds": [],
+      "activatedRuleIds": ["threat_sim_primary", "threat_sim_supporting"]
+    }
+  ],
+  "trust": [
+    {
+      "domainId": "SIM_OWNERSHIP", "state": "DISTRUSTED",
+      "evidenceIds": ["ev_1"], "threatIds": ["SIM_CHANNEL_COMPROMISE"],
+      "activatedRuleIds": ["trust_sim_ownership_distrust"]
+    }
+  ],
+  "factors": [
+    {
+      "factorId": "SMS_OTP", "status": "INELIGIBLE",
+      "failedRequirements": [{
+        "kind": "TRUST", "requirementId": "sms_requires_sim_ownership",
+        "actualState": "DISTRUSTED", "requiredState": "TRUSTED",
+        "evidenceIds": ["ev_1"], "ruleIds": ["trust_sim_ownership_distrust"],
+        "reasonCode": "trust_requirement_failed"
+      }],
+      "assuranceSatisfied": true, "frictionTier": "LOW", "traceEventIds": ["tr_4"]
+    }
+  ],
+  "selectedFactorId": "PASSKEY",
+  "action": "CHALLENGE",
+  "trace": [
+    {
+      "id": "tr_1", "phase": "EVIDENCE_NORMALIZATION", "ruleId": "ev_norm",
+      "ruleVersion": "1.0.0", "inputRefs": [], "outputRefs": ["ev_1"],
+      "explanationCode": "evidence_normalized", "sequence": 0
+    }
+  ],
+  "createdAt": "2026-08-07T08:00:00.000Z"
 }
 ```
 
-Errors: `400 VALIDATION_ERROR`, `404 NOT_FOUND` (unknown user),
-`409 CONFLICT` (duplicate client transaction ID), `429 RATE_LIMITED`.
+`action` is `"CHALLENGE"` when a factor was selected, `"ASSISTED_RECOVERY"`
+when no factor remains eligible or available.
 
 ### `GET /api/v1/decisions/:decisionId`
 
-Retrieve a persisted decision and its factor evaluations. Response `200` has
-the same shape as the create response. Errors: `404 NOT_FOUND`.
+Returns the persisted decision in the exact response shape above.
 
-### `GET /api/v1/decisions/:decisionId/audit`
+### `GET /api/v1/decisions/:decisionId/trace`
 
-Ordered audit events for a decision (append-only, insertion order).
+Returns only the structured causality trace:
 
 ```json
 [
-  { "id": "aud_0001", "decisionId": "dec_0001", "eventType": "DECISION_CREATED", "reasonCode": "decision_recorded", "details": { "riskLevel": "HIGH", "threatType": "SIM_CHANNEL_COMPROMISE" }, "createdAt": "2026-08-07T12:00:00.100Z" },
-  { "id": "aud_0002", "decisionId": "dec_0001", "eventType": "FACTOR_BLOCKED", "reasonCode": "sms_channel_untrusted", "details": { "factor": "SMS_OTP" }, "createdAt": "2026-08-07T12:00:00.110Z" }
+  { "id": "tr_1", "phase": "EVIDENCE_NORMALIZATION", "ruleId": "ev_norm", "ruleVersion": "1.0.0", "inputRefs": [], "outputRefs": ["ev_1"], "explanationCode": "evidence_normalized", "sequence": 0 }
 ]
 ```
 
-Errors: `404 NOT_FOUND`.
-
-### `GET /api/v1/decisions/:decisionId/signals`
-
-Persisted signal provenance for a decision — every signal with its value,
-source adapter, `synthetic` flag, and observed time. The UI renders this to
-disclose that all indicators are synthetic demo data.
-
-Errors: `404 NOT_FOUND`.
+## Challenges
 
 ### `POST /api/v1/challenges`
 
-Create an expiring one-time challenge for a selected or allowed factor. Blocked
-and unavailable factors are rejected — this is the policy-enforcement proof
-point.
+Create a server-enforced challenge for a factor of a persisted decision.
 
 ```json
-{ "decisionId": "dec_0001", "factor": "PASSKEY" }
+{ "decisionId": "dec_ab12cd34ef56", "factor": "PASSKEY" }
 ```
 
-Optional Phase 7 field: `"preferSimulated": true` forces the labeled
-SIMULATED challenge even when a real WebAuthn ceremony would be possible (the
-demo fallback affordance). It is rejected with `400` outside demo mode and
-never bypasses factor policy.
+- `factor` must be `ELIGIBLE` in the persisted decision — otherwise
+  `409 POLICY_REJECTION` with the stored factor state as `details`. Ineligible,
+  unavailable, disabled, and non-selected factors can never create challenges
+  through the direct API.
+- `preferSimulated: true` (demo-only, rejected outside demo mode) forces the
+  labeled SIMULATED mode even when a real WebAuthn ceremony would be possible.
 
-Response `201` — `mode` tells the client exactly which execution path runs:
+`201 Created`:
 
 ```json
-{ "challengeId": "ch_0001", "factor": "PASSKEY", "mode": "SIMULATED", "expiresAt": "2026-08-07T12:05:00.000Z" }
+{ "challengeId": "ch_1234abcd5678", "factor": "PASSKEY", "mode": "SIMULATED", "expiresAt": "2026-08-07T08:05:00.000Z" }
 ```
 
-- `mode: "SIMULATED"` — the labeled simulated adapter (no real ceremony).
-- `mode: "WEBAUTHN"` — a real WebAuthn ceremony; `publicOptions` carries the
-  `PublicKeyCredentialRequestOptionsJSON` for the browser.
-
-Mode selection (PASSKEY): the server runs a real WebAuthn ceremony only when
-the user has a registered credential **and** the request origin is a
-WebAuthn-capable secure context (https or localhost); otherwise it
-automatically returns the labeled SIMULATED fallback. RP id and expected
-origin are derived from the request `Origin` header so the ceremony binds to
-the exact demo origin.
-
-Errors: `400 VALIDATION_ERROR`, `404 NOT_FOUND` (decision),
-`409 POLICY_REJECTION` (blocked or unavailable factor), `429 RATE_LIMITED`.
+`mode` is `"SIMULATED"` (labeled demo execution) or `"WEBAUTHN"` (real
+ceremony, `publicOptions` carries the WebAuthn options).
 
 ### `POST /api/v1/challenges/:challengeId/verify`
 
-Verify a challenge. Rejects missing, expired, consumed, and
-decision-mismatched challenges; marks the challenge consumed and updates the
-transaction state in the same database transaction.
-
-SIMULATED challenge — the client submits the simulated verdict:
-
 ```json
-{ "challengeId": "ch_0001", "response": { "simulatedOk": true } }
+{ "challengeId": "ch_1234abcd5678", "response": { "simulatedOk": true } }
 ```
 
-WEBAUTHN challenge — the client submits the `AuthenticationResponseJSON`
-returned by the browser ceremony (`startAuthentication`); the server verifies
-challenge, origin, relying-party id, credential ownership, and advances the
-signature counter.
+The URL segment and body `challengeId` must match. Verification rejects:
 
-Response `200`:
+- unknown challenges (`404 NOT_FOUND`),
+- expired challenges (`409 CHALLENGE_ERROR`),
+- already-consumed challenges (`409 CHALLENGE_ERROR`),
+- WEBAUTHN challenges verified from a different origin (`409 CHALLENGE_ERROR`).
+
+`200 OK`:
 
 ```json
-{ "challengeId": "ch_0001", "verified": true, "transactionStatus": "AUTHORIZED" }
+{ "challengeId": "ch_1234abcd5678", "verified": true, "transactionStatus": "AUTHORIZED" }
 ```
 
-A failed ceremony or `simulatedOk: false` verifies to `verified: false` /
-`transactionStatus: "DENIED"`. Errors: `400 VALIDATION_ERROR`,
-`409 CHALLENGE_ERROR` (missing, expired, consumed, or replay).
+## Replay and diff
 
-### Passkey registration (demo mode)
+### `POST /api/v1/decisions/:decisionId/replays`
 
-A real WebAuthn registration ceremony for a synthetic demo user. Disabled
-(`403 DEMO_MODE_DISABLED`) outside demo mode.
+Replay a decision without mutating it. `EXACT` replay re-runs the original
+normalized evidence under the original policy version (determinism proof);
+`FORK` replay applies only the declared evidence/capability changes.
 
-**`POST /api/v1/passkeys/register/options`** — begin registration.
+```json
+{ "mode": "FORK", "capabilityChanges": [{ "capabilityId": "PASSKEY_ENROLLED", "available": false }] }
+```
+
+`201 Created`:
+
+```json
+{
+  "replayId": "rp_…",
+  "sourceDecisionId": "dec_ab12cd34ef56",
+  "mode": "FORK",
+  "policyVersion": "1.0.0",
+  "producedDecisionId": "dec_78cd90ef12ab",
+  "createdAt": "2026-08-07T08:01:00.000Z"
+}
+```
+
+### `GET /api/v1/replays/:replayId`
+
+Returns the replay record plus the produced decision response.
+
+### `GET /api/v1/replays/:replayId/diff`
+
+Structured semantic diff between source and produced decision — separated by
+section (`INPUT`, `THREAT`, `TRUST`, `FACTOR`, `RULE`, `SELECTION`), never
+comparing generated IDs or timestamps:
+
+```json
+{
+  "replayId": "rp_…",
+  "sourceDecisionId": "dec_ab12cd34ef56",
+  "identical": false,
+  "sections": [
+    {
+      "section": "FACTOR",
+      "changes": [{ "path": "factors.PASSKEY.status", "before": "ELIGIBLE", "after": "UNAVAILABLE" }]
+    },
+    {
+      "section": "SELECTION",
+      "changes": [{ "path": "selectedFactorId", "before": "PASSKEY", "after": null }]
+    }
+  ]
+}
+```
+
+## Verified remediation
+
+### `POST /api/v1/decisions/:decisionId/remediations/:factorId/verify`
+
+Derive candidate remediation change sets from the factor's failed requirements,
+verify each by replay, and return only replay-verified results:
+
+```json
+{ "decisionId": "dec_ab12cd34ef56", "factorId": "PASSKEY", "verified": true, "wouldBecomeEligible": true, "wouldBeSelected": true, "changeSets": [
+  { "capabilityChanges": [{ "capabilityId": "PASSKEY_ENROLLED", "available": true }] }
+] }
+```
+
+Precise claim language: `wouldBecomeEligible` only when replay proves it,
+`wouldBeSelected` only when replay proves the factor is selected after the
+change, and neither is emitted when the factor remains ineligible.
+
+## Passkey enrollment (stretch)
+
+Real WebAuthn registration is demo-gated (the only users are synthetic).
+
+### `POST /api/v1/passkeys/register/options`
 
 ```json
 { "userId": "user_demo_01" }
 ```
 
-Response `201`:
+Returns `{ "ceremonyId": "…", "options": { … } }` — the WebAuthn registration
+options, bound to the request `Origin` header.
+
+### `POST /api/v1/passkeys/register/verify`
 
 ```json
-{
-  "ceremonyId": "reg_0001",
-  "options": {
-    "challenge": "base64url…",
-    "rp": { "name": "Threat-Aware MFA", "id": "localhost" },
-    "user": { "id": "base64url…", "name": "Aarav Nair", "displayName": "Aarav Nair" },
-    "pubKeyCredParams": [ { "type": "public-key", "alg": -7 }, { "type": "public-key", "alg": -257 } ],
-    "authenticatorSelection": { "residentKey": "discouraged", "userVerification": "preferred" }
-  }
-}
+{ "ceremonyId": "…", "response": { … } }
 ```
 
-The ceremony is persisted server-side (challenge, expected origin, rp id) and
-must be consumed once within 5 minutes.
+Persists public credential data only and flips the user's `PASSKEY_ENROLLED`
+capability. The simulated adapter remains the explicitly labeled fallback for
+challenges whenever no real ceremony is possible.
 
-**`POST /api/v1/passkeys/register/verify`** — verify the browser attestation
-and persist the public credential.
+## Errors
+
+All errors share one shape:
 
 ```json
-{ "ceremonyId": "reg_0001", "response": { /* RegistrationResponseJSON from startRegistration */ } }
+{ "error": { "code": "POLICY_REJECTION", "message": "…", "details": { … }, "correlationId": "…" } }
 ```
 
-Response `200`: `{ "credentialId": "base64url…", "registered": true, "passkeyEnrolled": true }`.
+| Code | HTTP | Meaning |
+|---|---|---|
+| `VALIDATION_ERROR` | 400 | Malformed body (Zod details in `error.details`) |
+| `NOT_FOUND` | 404 | Unknown decision / challenge / replay |
+| `CONFLICT` | 409 | Duplicate `clientTransactionId` |
+| `POLICY_REJECTION` | 409 | Factor not eligible for a persisted decision |
+| `CHALLENGE_ERROR` | 409 | Expired, consumed, or wrong-origin challenge |
+| `PAYLOAD_TOO_LARGE` | 413 | Body over the 32kb limit |
+| `RATE_LIMITED` | 429 | Too many requests on critical endpoints |
+| `DEMO_MODE_DISABLED` | 403 | Demo-only affordance outside demo mode |
+| `INTERNAL_ERROR` | 500 | Unhandled failure (never leaks internals) |
 
-Only public credential data is stored (credential id, COSE public key,
-counter, transports). Errors: `400 VALIDATION_ERROR`, `404 NOT_FOUND` (user or
-ceremony), `409 CHALLENGE_ERROR` (verification failed, expired, consumed, or
-replay).
+## Common types
 
-### Demo endpoints (disabled outside demo mode)
+- `RiskLevel`: `LOW | MEDIUM | HIGH` (categorical — no probabilities).
+- `TrustState`: `TRUSTED | DEGRADED | DISTRUSTED | UNKNOWN` (ordinal — no percentages).
+- `ThreatSupport`: `STRONG | MODERATE | WEAK | UNSUPPORTED`.
+- `FactorStatus`: `ELIGIBLE | INELIGIBLE | UNAVAILABLE`.
+- `TracePhase`: `EVIDENCE_NORMALIZATION | THREAT_ASSESSMENT | TRUST_ASSESSMENT | FACTOR_ELIGIBILITY | SELECTION | CHALLENGE | OUTCOME`.
 
-| endpoint | purpose |
-|---|---|
-| `GET /api/v1/demo/users` | synthetic identity presets (users, devices, passkey enrollment, registered passkey ids) |
-| `GET /api/v1/demo/baseline?riskLevel=LOW\|MEDIUM\|HIGH` | fair scalar baseline — a function of risk level only |
-| `POST /api/v1/demo/users/:userId/passkey-enrollment` `{ "enrolled": false }` | toggle passkey enrollment (demo recovery flow) |
-| `POST /api/v1/demo/reset` | reset synthetic transactions/decisions/challenges and passkey credentials + ceremonies; `403` outside demo mode |
-
----
-
-## Contract rules (docs/EXECUTION.md PART 3)
-
-- API input and output are runtime-validated.
-- Money is integer minor units.
-- IDs are server-generated except client transaction ID, session ID, and device ID.
-- Server time owns `createdAt`, expiry, and audit timestamps.
-- The frontend never calculates risk, threat, or factor eligibility.
-- An unavailable or blocked factor cannot create a challenge.
-- Repeated use of the same client transaction ID must not create conflicting decisions.
-- Every decision stores policy version and normalized evidence.
-- Synthetic provider data is tagged as synthetic in storage and in the UI.
-- Passkey storage holds public credential data only — never private keys.
+All schemas are frozen in `packages/contracts` and validated at runtime.
