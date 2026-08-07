@@ -8,6 +8,13 @@ build/
 # Coverage
 coverage/
 
+# Database files (SQLite)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+data/
+
 # Environment and secrets
 .env
 .env.*

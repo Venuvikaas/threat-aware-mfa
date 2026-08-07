@@ -1,0 +1,13 @@
+{
+  "name": "@mfa/demo-data",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Deterministic synthetic demo fixtures and presets",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  }
+}

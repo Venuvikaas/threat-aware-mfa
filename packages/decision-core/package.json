@@ -1,0 +1,13 @@
+{
+  "name": "@mfa/decision-core",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Pure risk, threat, and policy decision engines",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  }
+}

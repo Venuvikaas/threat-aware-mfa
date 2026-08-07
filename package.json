@@ -1,27 +1,27 @@
 {
   "name": "threat-aware-mfa",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "description": "Threat-Aware MFA Policy Simulator - a frontend-only deterministic policy decision demo",
+  "description": "Threat-Aware MFA Decision Service - backend-first transaction authentication decision prototype",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @mfa/api\" \"npm run dev -w @mfa/web\"",
+    "dev:api": "npm run dev -w @mfa/api",
+    "dev:web": "npm run dev -w @mfa/web",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run test && npm run build"
-  },
-  "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "build": "npm run build -w @mfa/web",
+    "check": "npm run typecheck && npm run test && npm run build",
+    "db:migrate": "npm run db:migrate -w @mfa/api"
   },
   "devDependencies": {
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@types/node": "^22.10.2",
+    "concurrently": "^9.1.0",
     "typescript": "~5.6.2",
-    "vite": "^6.0.5",
     "vitest": "^3.0.5"
   }
 }

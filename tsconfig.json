@@ -1,23 +1,34 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
-    "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
-    "skipLibCheck": true,
-
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
+    "moduleDetection": "force",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
-
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@mfa/contracts": ["packages/contracts/src/index.ts"],
+      "@mfa/decision-core": ["packages/decision-core/src/index.ts"],
+      "@mfa/demo-data": ["packages/demo-data/src/index.ts"]
+    }
   },
-  "include": ["src", "tests", "vite.config.ts"]
+  "include": [
+    "apps/**/src/**/*.ts",
+    "apps/**/src/**/*.tsx",
+    "apps/**/tests/**/*.ts",
+    "packages/**/src/**/*.ts",
+    "packages/**/tests/**/*.ts",
+    "vitest.config.ts"
+  ]
 }
