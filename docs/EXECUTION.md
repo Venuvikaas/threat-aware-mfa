@@ -630,42 +630,42 @@ Rules:
 
 ---
 
-## ☐ PHASE 5 - Demo polish 🔴 BLOCKING
+## ☑ PHASE 5 - Demo polish 🔴 BLOCKING
 
 ### Visual hierarchy
 
-- [ ] **[DEMO]** Make `SAME RISK` the first visual anchor.  
+- [x] **[DEMO]** Make `SAME RISK` the first visual anchor.  
   Commit: `style(ui): emphasize shared risk`
 
-- [ ] **[DEMO]** Make each differing threat indicator the second visual anchor.  
+- [x] **[DEMO]** Make each differing threat indicator the second visual anchor.  
   Commit: `style(ui): emphasize threat evidence`
 
-- [ ] **[DEMO]** Make each excluded factor and reason the third visual anchor.  
+- [x] **[DEMO]** Make each excluded factor and reason the third visual anchor.  
   Commit: `style(ui): emphasize factor exclusion`
 
-- [ ] **[DEMO]** Make the final selected factor or assisted recovery outcome the strongest result state.  
+- [x] **[DEMO]** Make the final selected factor or assisted recovery outcome the strongest result state.  
   Commit: `style(ui): emphasize policy outcome`
 
-- [ ] **[DEMO]** Remove decorative elements that do not support the five-stage trace.  
+- [x] **[DEMO]** Remove decorative elements that do not support the five-stage trace.  
   Commit: `style(ui): remove nonessential decoration`
 
 ### Interaction polish
 
-- [ ] **[DEV]** Add small CSS transitions for state changes only. No animation library.  
+- [x] **[DEV]** Add small CSS transitions for state changes only. No animation library.  
   Commit: `style(ui): add restrained state transitions`
 
-- [ ] **[DEV]** Keep all primary controls visible without a menu.  
+- [x] **[DEV]** Keep all primary controls visible without a menu.  
   Commit: `fix(ui): keep demo controls visible`
 
-- [ ] **[DEMO]** Verify all text is readable at presentation zoom and screen-recording resolution.  
+- [x] **[DEMO]** Verify all text is readable at presentation zoom and screen-recording resolution.  
   Commit: `style(ui): tune presentation readability`
 
 ### Exit gate
 
-- [ ] The default screen is presentation-ready.
-- [ ] A screenshot communicates the core idea.
-- [ ] The wow-moment toggle is visible and reliable.
-- [ ] Polish has not introduced a new dependency or failure mode.
+- [x] The default screen is presentation-ready.
+- [x] A screenshot communicates the core idea.
+- [x] The wow-moment toggle is visible and reliable.
+- [x] Polish has not introduced a new dependency or failure mode.
 
 ---
 
