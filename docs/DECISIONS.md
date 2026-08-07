@@ -105,3 +105,17 @@ Consequence: The prototype does not implement or simulate the recovery journey i
 
 This section is completed at the end of the build (Phase 6). No cuts so far beyond
 the initial decisions above.
+
+---
+
+## Claim discipline audit (Phase 4)
+
+Decision: Keep every UI formulation within the approved copy set and document the audit.
+
+Reason: The judged path must not overclaim detection, calibration, compliance, or execution.
+
+Rejected: Any claim that the prototype detects fraud, authenticates a real payment, or is production-ready.
+
+Consequence: All evidence labels are explicitly "synthetic indicators", and the outcome card always reads "Authentication execution simulated".
+
+Audit result: A regex scan of `src/` for prohibited claims (detect*, calibrat*, probability, production-ready, compliance, executes, universal) found no UI copy violations; the only matches were CSS `border-radius` values.
