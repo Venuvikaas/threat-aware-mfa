@@ -1,16 +1,18 @@
-# Demo Script — Threat-Aware MFA Policy Simulator
+# Demo Script — Threat-Aware MFA Decision Service
 
-Target: **2–3 minutes**. One screen, preset controls only, no network.
+Target: **2–3 minutes**. One screen, hero presets, live backend, no editing.
 
 ## Setup before judging
 
 ```bash
-npm run check   # verify the smoke gate passes
-npm run dev     # start the app, open http://localhost:5173
+npm run check    # typecheck + tests + build must pass
+npm run smoke    # end-to-end demo path: SMOKE: PASS on a fresh database
+npm run dev      # API on :4000, client on http://localhost:5173
 ```
 
-Confirm the default view shows both scenarios with passkey enrolled and the
-blue **SAME RISK** badge visible.
+Confirm the header shows **API online**, the two hero cards (**SIM swap**,
+**Phishing relay**) are visible, and the customer is **Aarav Nair (passkey
+enrolled)**.
 
 ## The sequence
 
@@ -21,68 +23,75 @@ blue **SAME RISK** badge visible.
 
 Do not open with architecture or AI.
 
-### 2. Point to the shared high-risk score
+### 2. Run the SIM-swap scenario
 
-Point to the **SAME RISK** badge and the identical risk, assurance, amount,
-and payee values in the header. Stress: every scalar input is identical.
+Click **SIM swap**. Call out, pointing at the request flow:
 
-### 3. Reveal the differing threat evidence
+> "The client submits a ₹50,000 transaction through `POST /api/v1/decisions`.
+> The backend evaluates risk, threat, and factor eligibility."
 
-Left panel: **Recent SIM change** (tagged "drives hypothesis"), new device,
-new payee.
-Right panel: **Phishing relay indicator** (tagged "drives hypothesis"),
-unusual session, new payee.
+Point to the result:
 
-> "Same risk — but the suspected failure path differs."
+- RISK **HIGH** with its exact reason chips (`recent_sim_change`,
+  `first_seen_device`, …)
+- Suspected threat **SIM channel compromise**
+- Factor cards: **PASSKEY ALLOWED**, **SMS OTP BLOCKED** — reason code
+  `sms_channel_untrusted`
 
-### 4. Show the scalar baseline
+> "The high-risk score says 'authenticate more'. The threat context says
+> something stronger: don't send an OTP through the channel under suspicion."
 
-Point to the dashed baseline card: both scenarios return
-`phishing-resistant factor required` because the baseline sees only risk and
-assurance.
+### 3. Show persistence
 
-> "A severity-only policy cannot distinguish these two events."
+Open the **audit timeline**: `DECISION_CREATED → FACTOR_BLOCKED → FACTOR_SELECTED`,
+each with its reason and policy version. Click **Show raw API response** to
+show the exact machine-readable decision and copy it.
 
-### 5. Follow both five-stage traces
+### 4. Run the phishing scenario
 
-Stage by stage: Observed → Suspected → Do not trust → Excluded → Decision.
-Left: SIM channel compromise, distrusts the phone number. Right: phishing
-relay, distrusts the SMS relay path.
+Click **Phishing relay**. The **SAME RISK** banner appears — same risk level,
+same scalar baseline requirement — but the second panel shows **Phishing
+relay** and SMS OTP blocked for a different reason: `factor_relayable`.
 
-### 6. Explain why SMS is excluded for different reasons
+> "Same risk, same baseline, different distrust."
 
-Left: `SMS_CHANNEL_UNTRUSTED` — the code routes through the suspected phone
-number.
-Right: `FACTOR_RELAYABLE` — the code can be relayed to the attacker.
+### 5. The wow moment — direct API enforcement
 
-> "Same factor, same outcome — but different, defensible reasons."
+On the SIM-swap panel click **Try SMS_OTP (blocked)**. The client calls
+`POST /api/v1/challenges` with the blocked factor and the backend answers:
 
-### 7. Toggle passkey enrollment off
+> **POLICY_REJECTION — blocked by persisted policy**
 
-On the SIM-swap panel, turn off **Passkey enrolled**.
+> "You cannot bypass the decision by calling the API directly. The persisted
+> policy decision is enforced at the challenge boundary."
 
-### 8. Show assisted recovery instead of unsafe fallback
+### 6. Execute the selected factor
 
-The passkey becomes `unavailable`, SMS stays `excluded`, and the outcome
-becomes:
+Click **Continue with PASSKEY** → **Verify with simulated passkey**. Show the
+SIMULATED label, then the transaction **AUTHORIZED** and the new
+`CHALLENGE_CREATED → CHALLENGE_VERIFIED` audit events.
 
-> "Payment paused. Continue through assisted recovery."
+### 7. The conservative fallback
 
-> "The policy does not pick an unsafe method just to complete the flow."
+Switch the customer to **Priya Sharma (no passkey)** in the form and click
+**Evaluate transaction**. The backend returns **Assisted recovery required** —
+no factor survives, and the service never falls back to the untrusted SMS
+channel.
 
-### 9. Close with the tagline and product boundary
+### 8. Reset
 
-> "Risk tells you how worried to be. Threat context tells you what not to
-> trust."
+Click **Reset demo**; the database returns to its deterministic seed and the
+panels clear. Refresh the page — everything reloads from the backend.
 
-Then state the boundary:
+## Closing
 
-> "This prototype does not detect fraud or replace an identity provider. It
-> is the decision layer that turns existing threat evidence into an
-> explainable factor policy. The scenario supplies synthetic indicators, and
-> authentication execution is simulated."
+> "This is not a static risk dashboard. It is an integration-ready decision
+> service: signals enter through an API, policy is enforced on the server,
+> factor challenges cannot bypass the decision, and every result is auditable."
 
-## After the demo
+## Claim boundaries to respect
 
-Click **Reset demo** to restore the default view, or refresh the page — the
-deterministic default state returns either way.
+- All signals are **synthetic demo data** from mock provider adapters.
+- The passkey path is a **labeled simulated adapter**, not real WebAuthn.
+- Support bands are deterministic policy output, not calibrated probabilities.
+- No live carrier, bank, UPI, or telecom integration exists.
