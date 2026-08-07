@@ -1,9 +1,12 @@
 /**
- * Pure decision engines (risk, threat, policy) land in Phase 2.
+ * Threat-Aware MFA Decision Core — pure, deterministic decision engines.
  *
- * This package is intentionally empty during Phase 0 so the workspace
- * compiles and the frozen contracts can be consumed by both apps. The
- * engines are pure, deterministic functions over the contracts in
- * @mfa/contracts — no I/O, no time, no randomness.
+ * No I/O, no time, no randomness. Every function is a pure function over the
+ * frozen contracts in @mfa/contracts (docs/EXECUTION.md Phase 2 exit gate).
  */
-export {};
+export * from "./policy.js";
+export * from "./riskEngine.js";
+export * from "./threatEngine.js";
+export * from "./factorRegistry.js";
+export * from "./policyEngine.js";
+export * from "./scalarBaseline.js";

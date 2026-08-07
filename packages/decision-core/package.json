@@ -9,5 +9,8 @@
   },
   "scripts": {
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@mfa/contracts": "^0.1.0"
   }
 }
