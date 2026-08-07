@@ -181,3 +181,63 @@ Reason: The product must demonstrate the provider *contract* — and the policy 
 Rejected: Live carriers, UPI, Account Aggregator, IP-reputation, device-fingerprinting SDKs, real SMS delivery, and any claim that those integrations exist. Mock providers must never fabricate a safe signal on failure; failure yields an explicit unknown signal.
 
 Consequence: Every stored signal is tagged synthetic with source and observed time; provider failure is explicit rather than silent; and the UI labels simulation visibly. No OTP, passkey private key, biometric data, or secret is ever stored.
+
+---
+
+## Express + better-sqlite3 over Fastify or Prisma
+
+Decision: The API uses Express with Zod validation, and SQLite is accessed through better-sqlite3 with explicit SQL migrations tracked in `schema_migrations`.
+
+Reason: The execution framework says to use Fastify only if already comfortable with it and Prisma only if its migration flow is already known; neither was true, so the conservative defaults win. Explicit SQL migrations keep the entire data layer visible and reviewable in one place, and better-sqlite3's synchronous API makes the atomic decision/challenge transactions straightforward to reason about.
+
+Rejected: Fastify, Prisma, and any ORM or query builder — they add indirection without strengthening the demo.
+
+Consequence: The repository owns plain SQL; schema changes are explicit migration files.
+
+---
+
+## npm workspaces monorepo
+
+Decision: The repository is a single npm-workspaces repository (`apps/api`, `apps/web`, `packages/contracts`, `packages/decision-core`, `packages/demo-data`) with root scripts for dev, typecheck, test, build, check, db:migrate, and smoke.
+
+Reason: One `npm install` boots every package; TypeScript path aliases and Vitest aliases keep source-level imports working in both apps; the frozen contracts are the single shared dependency.
+
+Rejected: pnpm/yarn workspaces, Turborepo, Nx, and a separate deployable per service.
+
+Consequence: All packages must share compatible TypeScript/Vitest configuration; there is no per-service versioning.
+
+---
+
+## Blocked-factor enforcement at the challenge boundary
+
+Decision: A blocked or unavailable factor cannot create a challenge: `POST /api/v1/challenges` validates the requested factor against the persisted decision's allowed list and answers `POLICY_REJECTION` otherwise. Challenges are one-time (consumed atomically on verification), expire after 5 minutes, and reject replay.
+
+Reason: The judged wow moment is a direct API proof — "request the blocked channel, get rejected, then execute the allowed factor" — which only works if policy is enforced server-side at the execution boundary, not just displayed.
+
+Rejected: Client-side-only factor gating, and challenge-less direct authorization.
+
+Consequence: A frontend that tries the blocked channel sees a real 409; the audit trail records the attempt.
+
+---
+
+## Fair scalar baseline as a server endpoint
+
+Decision: The scalar baseline is a pure function of risk level exposed as `GET /api/v1/demo/baseline`; the client renders it as a shared result and never computes it.
+
+Reason: The baseline exists only to show information loss (equal-risk transactions receive the same severity-only requirement). Serving it from the API keeps the frontend free of policy logic and makes the comparison reproducible in the demo.
+
+Rejected: Computing the baseline in the browser, or adding it to the frozen decision response.
+
+Consequence: The baseline is demo-scoped; it does not alter the decision contract.
+
+---
+
+## Simulated passkey adapter only (no real WebAuthn)
+
+Decision: The demo ships the simulated passkey adapter with an explicit `SIMULATED` mode. Real WebAuthn remains the stretch phase with kill criteria from docs/EXECUTION.md Phase 7.
+
+Reason: The adapter contract, challenge lifecycle, replay safety, and audit trail are the demonstration value; a real ceremony adds browser-origin risk to the judged flow without changing the decision story.
+
+Rejected: Shipping a half-configured WebAuthn path that could break the presentation environment.
+
+Consequence: The factor execution step is visibly labeled as simulated.
