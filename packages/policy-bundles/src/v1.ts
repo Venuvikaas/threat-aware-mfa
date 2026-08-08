@@ -149,3 +149,40 @@ export const DEMO_POLICY_DATA: Omit<PolicyBundle, "contentHash"> = {
   },
   createdAt: "2026-08-01T00:00:00.000Z",
 };
+
+/* Candidate policy v1.1.0 (Stretch B) -------------------------------------- */
+/**
+ * DRAFT candidate bundle with exactly one deliberate rule change vs v1.0.0:
+ * SIM_CHANNEL_COMPROMISE now also DEGRADEs CREDENTIAL_INTEGRITY. Under the
+ * generic evaluator this makes PASSKEY and TOTP ineligible in the SIM-swap
+ * scenario (both require CREDENTIAL_INTEGRITY >= TRUSTED), so replaying that
+ * decision under v1.1.0 flips selection from PASSKEY to assisted recovery —
+ * a pure policy counterfactual with no input change.
+ */
+export const CANDIDATE_BUNDLE_ID = "bundle_demo_1_1_0";
+export const CANDIDATE_POLICY_VERSION = "1.1.0";
+
+export const CANDIDATE_TRUST_IMPACT_RULES: TrustImpactRule[] = [
+  ...TRUST_IMPACT_RULES,
+  { id: "trust_sim_credentials", threatId: "SIM_CHANNEL_COMPROMISE", domainId: "CREDENTIAL_INTEGRITY", impact: "DEGRADE" },
+];
+
+/** The candidate bundle data (contentHash filled by hashPolicy). */
+export const CANDIDATE_POLICY_DATA: Omit<PolicyBundle, "contentHash"> = {
+  id: CANDIDATE_BUNDLE_ID,
+  version: CANDIDATE_POLICY_VERSION,
+  status: "DRAFT",
+  riskRules: RISK_RULES,
+  threatRules: THREAT_RULES,
+  trustImpactRules: CANDIDATE_TRUST_IMPACT_RULES,
+  factorDefinitions: FACTOR_DEFINITIONS,
+  selectionPolicy: {
+    requiredAssuranceByRisk: {
+      LOW: SELECTION_POLICY.requiredAssuranceByRisk.LOW,
+      MEDIUM: SELECTION_POLICY.requiredAssuranceByRisk.MEDIUM,
+      HIGH: SELECTION_POLICY.requiredAssuranceByRisk.HIGH,
+    },
+    tieBreaker: [...SELECTION_POLICY.tieBreaker],
+  },
+  createdAt: "2026-08-02T00:00:00.000Z",
+};

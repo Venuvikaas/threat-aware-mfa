@@ -10,8 +10,10 @@
 import { describe, expect, it } from "vitest";
 import type { PolicyBundle } from "@mfa/contracts";
 import {
+  CANDIDATE_POLICY_BUNDLE,
   DEMO_POLICY_BUNDLE,
   DEMO_POLICY_DATA,
+  POLICY_BUNDLES,
   hashPolicy,
   validatePolicy,
   verifyPolicyHash,
@@ -100,5 +102,22 @@ describe("hashPolicy", () => {
     // no longer matches.
     const corrupted = { ...tampered, version: "1.0.1" };
     expect(verifyPolicyHash(corrupted)).toBe(false);
+  });
+});
+
+describe("candidate policy v1.1.0 (Stretch B)", () => {
+  it("validates clean and carries exactly one deliberate rule change", () => {
+    expect(validatePolicy(CANDIDATE_POLICY_BUNDLE)).toEqual([]);
+    const added = CANDIDATE_POLICY_BUNDLE.trustImpactRules.filter(
+      (r) => !DEMO_POLICY_BUNDLE.trustImpactRules.some((d) => d.id === r.id)
+    );
+    expect(added).toHaveLength(1);
+    expect(added[0].id).toBe("trust_sim_credentials");
+  });
+
+  it("is a DRAFT candidate (never the active default) with a verified hash", () => {
+    expect(CANDIDATE_POLICY_BUNDLE.status).toBe("DRAFT");
+    expect(verifyPolicyHash(CANDIDATE_POLICY_BUNDLE)).toBe(true);
+    expect(POLICY_BUNDLES.map((b) => b.version)).toEqual(["1.0.0", "1.1.0"]);
   });
 });
