@@ -8,6 +8,7 @@
  *   verification.
  */
 import { describe, expect, it } from "vitest";
+import type { PolicyBundle } from "@mfa/contracts";
 import {
   DEMO_POLICY_BUNDLE,
   DEMO_POLICY_DATA,
@@ -36,7 +37,7 @@ describe("validatePolicy", () => {
           : f
       ),
     };
-    const issues = validatePolicy(bad);
+    const issues = validatePolicy(bad as unknown as PolicyBundle);
     expect(issues.some((i) => i.message.includes("MOON_PHASE"))).toBe(true);
   });
 
@@ -49,7 +50,7 @@ describe("validatePolicy", () => {
           : f
       ),
     };
-    expect(validatePolicy(bad).some((i) => i.message.includes("VIP_ACCESS"))).toBe(true);
+    expect(validatePolicy(bad as unknown as PolicyBundle).some((i) => i.message.includes("VIP_ACCESS"))).toBe(true);
   });
 
   it("rejects an unknown threat id in a trust impact rule", () => {
@@ -57,7 +58,7 @@ describe("validatePolicy", () => {
       ...DEMO_POLICY_BUNDLE,
       trustImpactRules: [{ id: "ti_bad", threatId: "CRYPTO_MINING", domainId: "SIM_OWNERSHIP", impact: "DISTRUST" }],
     };
-    expect(validatePolicy(bad).some((i) => i.message.includes("CRYPTO_MINING"))).toBe(true);
+    expect(validatePolicy(bad as unknown as PolicyBundle).some((i) => i.message.includes("CRYPTO_MINING"))).toBe(true);
   });
 
   it("rejects an unknown evidence type in a threat rule", () => {
@@ -67,7 +68,7 @@ describe("validatePolicy", () => {
         { id: "tr_bad", threatId: "SIM_CHANNEL_COMPROMISE", kind: "PRIMARY", predicate: { evidenceType: "OUJIA_BOARD", op: "EQ", value: true } },
       ],
     };
-    expect(validatePolicy(bad).some((i) => i.message.includes("OUJIA_BOARD"))).toBe(true);
+    expect(validatePolicy(bad as unknown as PolicyBundle).some((i) => i.message.includes("OUJIA_BOARD"))).toBe(true);
   });
 });
 
