@@ -43,6 +43,10 @@ export function challengeError(message: string, details?: unknown): ApiError {
   return new ApiError(409, ERROR_CODES.CHALLENGE, message, details);
 }
 
+export function replayError(message: string, details?: unknown): ApiError {
+  return new ApiError(409, ERROR_CODES.REPLAY, message, details);
+}
+
 /** Validate `req.body` against a Zod schema and attach the parsed value. */
 export function validate<T>(schema: ZodSchema<T>) {
   return (req: Request, _res: Response, next: NextFunction): void => {
