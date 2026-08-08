@@ -12,11 +12,17 @@ import {
   applyEvidenceOverrides,
   buildDecisionDiff,
   diffDecisions,
+  diffPolicies,
   evaluateDecision,
   normalizeEvidence,
   type RawEvidence,
 } from "@mfa/decision-core";
-import { DEMO_POLICY_BUNDLE } from "@mfa/policy-bundles";
+import {
+  CANDIDATE_POLICY_BUNDLE,
+  DEMO_POLICY_BUNDLE,
+  DEMO_POLICY_DATA,
+  withContentHash,
+} from "@mfa/policy-bundles";
 import { constrainedCapabilityScenario, phishingScenario, simSwapScenario } from "@mfa/demo-data";
 import type { CapabilityState, DecisionResponse } from "@mfa/contracts";
 
@@ -165,5 +171,61 @@ describe("diffDecisions", () => {
     ]);
     const sections = diffDecisions(sim, constrained);
     expect(sections.find((s) => s.section === "SELECTION")?.changes.length).toBeGreaterThan(0);
+  });
+});
+
+describe("diffPolicies (Stretch B)", () => {
+  it("returns no policy changes for the same bundle", () => {
+    expect(diffPolicies(DEMO_POLICY_BUNDLE, DEMO_POLICY_BUNDLE)).toEqual([]);
+  });
+
+  it("lists the candidate rule delta as policy-only changes (version, hash, added rule)", () => {
+    const changes = diffPolicies(DEMO_POLICY_BUNDLE, CANDIDATE_POLICY_BUNDLE);
+    const paths = changes.map((c) => c.path);
+    expect(paths).toContain("policy.version");
+    expect(paths).toContain("policy.contentHash");
+    expect(paths).toContain("policy.status");
+    expect(paths).toContain("policy.trustImpactRules.trust_sim_credentials");
+    expect(changes.every((c) => c.path.startsWith("policy."))).toBe(true);
+  });
+
+  it("reports changed and removed rules without touching inputs", () => {
+    const changed = withContentHash({
+      ...DEMO_POLICY_DATA,
+      trustImpactRules: DEMO_POLICY_DATA.trustImpactRules
+        .filter((r) => r.id !== "trust_phish_delivery")
+        .map((r) => (r.id === "trust_sim_ownership" ? { ...r, impact: "DEGRADE" } : r)),
+    });
+    const changes = diffPolicies(DEMO_POLICY_BUNDLE, changed);
+    const paths = changes.map((c) => c.path);
+    expect(paths).toContain("policy.trustImpactRules.trust_sim_ownership");
+    expect(paths).toContain("policy.trustImpactRules.trust_phish_delivery");
+    expect(changes.every((c) => c.path.startsWith("policy."))).toBe(true);
+  });
+
+  it("buildDecisionDiff emits a POLICY section ahead of derived deltas under a new bundle", () => {
+    const source = decisionFrom(SIM_OVERRIDES, AARAV_CAPS);
+    const producedOut = evaluateDecision({ evidence: source.evidence, capabilities: AARAV_CAPS, policy: CANDIDATE_POLICY_BUNDLE });
+    const produced: DecisionResponse = {
+      ...source,
+      decisionId: "dec_prod",
+      policy: {
+        bundleId: CANDIDATE_POLICY_BUNDLE.id,
+        version: CANDIDATE_POLICY_BUNDLE.version,
+        contentHash: CANDIDATE_POLICY_BUNDLE.contentHash,
+      },
+      risk: producedOut.risk,
+      threats: producedOut.threats,
+      trust: producedOut.trust,
+      factors: producedOut.factors,
+      selectedFactorId: producedOut.selectedFactorId,
+      action: producedOut.action,
+      trace: producedOut.trace,
+    };
+    const diff = buildDecisionDiff("rp_t", "dec_src", source, produced, DEMO_POLICY_BUNDLE, CANDIDATE_POLICY_BUNDLE);
+    expect(diff.identical).toBe(false);
+    expect(diff.sections[0].section).toBe("POLICY");
+    expect(diff.sections.some((s) => s.section === "INPUT")).toBe(false);
+    expect(diff.sections.some((s) => s.section === "SELECTION")).toBe(true);
   });
 });

@@ -23,10 +23,11 @@ import type {
   DiffSection,
   EvidenceItem,
   FactorEvaluation,
+  PolicyBundle,
   RuleTraceEvent,
   ThreatAssessment,
-  TrustAssessment,
   TracePhase,
+  TrustAssessment,
 } from "@mfa/contracts";
 
 /** Evidence fields that carry decision semantics (excludes id and timestamps). */
@@ -198,14 +199,80 @@ export function diffDecisions(source: DecisionResponse, produced: DecisionRespon
   return sections;
 }
 
+/**
+ * Compare two policy bundles at the rule level (Stretch B).
+ *
+ * Only policy content is compared — version, status, hash, declarative rule
+ * lists, and selection policy. Inputs are never involved, so policy deltas
+ * can never be mislabeled as input changes.
+ */
+export function diffPolicies(source: PolicyBundle, produced: PolicyBundle): DiffChange[] {
+  const changes: DiffChange[] = [];
+
+  if (source.version !== produced.version) {
+    changes.push({ path: "policy.version", before: source.version, after: produced.version });
+  }
+  if (source.status !== produced.status) {
+    changes.push({ path: "policy.status", before: source.status, after: produced.status });
+  }
+  if (source.contentHash !== produced.contentHash) {
+    changes.push({ path: "policy.contentHash", before: source.contentHash, after: produced.contentHash });
+  }
+
+  comparePolicyRules(source.riskRules, produced.riskRules, "policy.riskRules", changes);
+  comparePolicyRules(source.threatRules, produced.threatRules, "policy.threatRules", changes);
+  comparePolicyRules(source.trustImpactRules, produced.trustImpactRules, "policy.trustImpactRules", changes);
+  comparePolicyRules(source.factorDefinitions, produced.factorDefinitions, "policy.factorDefinitions", changes);
+
+  if (JSON.stringify(source.selectionPolicy) !== JSON.stringify(produced.selectionPolicy)) {
+    changes.push({ path: "policy.selectionPolicy", before: source.selectionPolicy, after: produced.selectionPolicy });
+  }
+
+  return changes;
+}
+
+/** Compare declarative rule lists by id: added, removed, or changed entries. */
+function comparePolicyRules<T extends { id: string }>(
+  before: T[],
+  after: T[],
+  pathPrefix: string,
+  changes: DiffChange[]
+): void {
+  const beforeById = new Map(before.map((r) => [r.id, r]));
+  const afterById = new Map(after.map((r) => [r.id, r]));
+  const ids = new Set([...beforeById.keys(), ...afterById.keys()]);
+  for (const id of ids) {
+    const beforeRule = beforeById.get(id);
+    const afterRule = afterById.get(id);
+    if (!afterRule) {
+      changes.push({ path: `${pathPrefix}.${id}`, before: beforeRule, after: undefined });
+    } else if (!beforeRule) {
+      changes.push({ path: `${pathPrefix}.${id}`, before: undefined, after: afterRule });
+    } else if (JSON.stringify(beforeRule) !== JSON.stringify(afterRule)) {
+      changes.push({ path: `${pathPrefix}.${id}`, before: beforeRule, after: afterRule });
+    }
+  }
+}
+
 /** Convenience: build a full DecisionDiff record from a replay id + two decisions. */
 export function buildDecisionDiff(
   replayId: string,
   sourceDecisionId: string,
   source: DecisionResponse,
-  produced: DecisionResponse
+  produced: DecisionResponse,
+  sourcePolicy?: PolicyBundle,
+  producedPolicy?: PolicyBundle
 ): DecisionDiff {
   const sections = diffDecisions(source, produced);
+  // Stretch B: rule-level policy deltas are a separate section, never merged
+  // into input/derived changes. Same bundle => empty (exact replay stays
+  // identical); different bundle => the actual added/removed/changed rules.
+  if (sourcePolicy && producedPolicy) {
+    const policyChanges = diffPolicies(sourcePolicy, producedPolicy);
+    if (policyChanges.length > 0) {
+      sections.unshift({ section: "POLICY", changes: policyChanges });
+    }
+  }
   return {
     replayId,
     sourceDecisionId,
