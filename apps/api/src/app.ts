@@ -17,6 +17,8 @@ import { createChallengeRoutes } from "./routes/challengeRoutes.js";
 import { createDecisionRoutes } from "./routes/decisionRoutes.js";
 import { createDemoRoutes } from "./routes/demoRoutes.js";
 import { createPasskeyRoutes } from "./routes/passkeyRoutes.js";
+import { createRemediationRoutes } from "./routes/remediationRoutes.js";
+import { createReplayRoutes } from "./routes/replayRoutes.js";
 
 export interface AppDeps {
   db: Db;
@@ -99,6 +101,8 @@ export function createApp(deps: AppDeps): express.Express {
   app.use("/api/v1/challenges", createChallengeRoutes({ db: deps.db, demoMode }));
   app.use("/api/v1/passkeys", createPasskeyRoutes({ db: deps.db, demoMode }));
   app.use("/api/v1/demo", createDemoRoutes({ db: deps.db, demoMode }));
+  app.use("/api/v1", createReplayRoutes({ db: deps.db }));
+  app.use("/api/v1", createRemediationRoutes({ db: deps.db }));
 
   /* 404 + errors ----------------------------------------------------------- */
 
