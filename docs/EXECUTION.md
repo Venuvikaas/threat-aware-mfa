@@ -1267,10 +1267,10 @@ Attempt only after every mandatory phase passes.
 
 ## Stretch B: Policy-version replay
 
-- [ ] Add candidate policy `v1.1.0` with one deliberate rule change.
-- [ ] Replay an existing decision under the candidate policy.
-- [ ] Show actual policy-rule differences separately from input differences.
-- [ ] Never label input changes as policy differences.
+- [x] Add candidate policy `v1.1.0` with one deliberate rule change.
+- [x] Replay an existing decision under the candidate policy.
+- [x] Show actual policy-rule differences separately from input differences.
+- [x] Never label input changes as policy differences.
 
 ## Stretch C: Derived compatibility matrix
 

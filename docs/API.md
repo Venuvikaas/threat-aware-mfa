@@ -213,6 +213,9 @@ The URL segment and body `challengeId` must match. Verification rejects:
 Replay a decision without mutating it. `EXACT` replay re-runs the original
 normalized evidence under the original policy version (determinism proof);
 `FORK` replay applies only the declared evidence/capability changes.
+`policyVersion` (optional) re-runs under any seeded bundle — the demo ships
+the DRAFT candidate `1.1.0` with one deliberate rule change (Stretch B); the
+rule deltas surface in the diff's `POLICY` section.
 
 ```json
 { "mode": "FORK", "capabilityChanges": [{ "capabilityId": "PASSKEY_ENROLLED", "available": false }] }
@@ -238,8 +241,11 @@ Returns the replay record plus the produced decision response.
 ### `GET /api/v1/replays/:replayId/diff`
 
 Structured semantic diff between source and produced decision — separated by
-section (`INPUT`, `THREAT`, `TRUST`, `FACTOR`, `RULE`, `SELECTION`), never
-comparing generated IDs or timestamps:
+section (`INPUT`, `POLICY`, `THREAT`, `TRUST`, `FACTOR`, `RULE`, `SELECTION`),
+never comparing generated IDs or timestamps. The `POLICY` section lists the
+actual added/removed/changed policy rules between the source bundle and the
+replayed bundle (Stretch B); input changes are never labeled as policy
+changes:
 
 ```json
 {

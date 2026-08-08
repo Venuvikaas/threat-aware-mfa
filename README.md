@@ -62,7 +62,9 @@ the generic evaluator derives eligibility.
    never create a challenge — even with a direct API call.
 6. Replays any persisted decision (exact for determinism proof, forked with
    evidence/capability changes for counterfactuals) and returns a structured
-   semantic diff separated by section.
+   semantic diff separated by section — including the DRAFT candidate policy
+   `1.1.0` (one deliberate rule change), whose rule deltas appear in their
+   own `POLICY` section and are never mislabeled as input changes.
 7. Verifies remediation by replay: the factor inspector only ever claims
    "would become eligible" / "would be selected" when replay proves it.
 
