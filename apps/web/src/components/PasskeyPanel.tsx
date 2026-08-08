@@ -1,5 +1,5 @@
 /**
- * Passkey panel (docs/EXECUTION_new.md Phase 7).
+ * Passkey enrollment panel (EXECUTION_new2.md Phase 5 / Stretch A).
  *
  * Demo passkey enrollment for the selected synthetic user. Runs a REAL
  * WebAuthn registration ceremony when the origin is WebAuthn-capable; the
@@ -8,7 +8,8 @@
  * fallback is never hidden.
  */
 import { useState } from "react";
-import { ApiError, type DemoUser } from "../lib/api";
+import type { DemoUser } from "@mfa/demo-data";
+import { ApiError } from "../lib/api";
 import { enrollPasskey, isWebAuthnAvailable } from "../lib/webauthn";
 
 interface Props {
@@ -49,7 +50,7 @@ export function PasskeyPanel({ userId, users, onChanged }: Props) {
 
   if (!user) return null;
 
-  const passkeyCount = user.passkeys.length;
+  const enrolled = user.capabilities.PASSKEY_ENROLLED;
 
   return (
     <section className="passkey-panel">
@@ -67,12 +68,7 @@ export function PasskeyPanel({ userId, users, onChanged }: Props) {
             <strong>{user.name}</strong>
           </span>
           <span className="chip">
-            {user.passkeyEnrolled ? "policy: enrolled" : "policy: not enrolled"}
-          </span>
-          <span className={passkeyCount > 0 ? "chip chip-real" : "chip chip-muted"}>
-            {passkeyCount > 0
-              ? `${passkeyCount} real credential${passkeyCount === 1 ? "" : "s"}`
-              : "no real credential — simulated fallback"}
+            {enrolled ? "capability: passkey enrolled" : "capability: not enrolled"}
           </span>
         </div>
         <button
@@ -83,7 +79,7 @@ export function PasskeyPanel({ userId, users, onChanged }: Props) {
         >
           {busy
             ? "Awaiting browser prompt…"
-            : passkeyCount > 0
+            : enrolled
               ? "Enroll another passkey"
               : "Enroll passkey (real ceremony)"}
         </button>

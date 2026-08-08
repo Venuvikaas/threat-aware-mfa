@@ -1,32 +1,34 @@
 /**
- * API client for the Threat-Aware MFA Decision Service.
+ * API client for the decision console (EXECUTION_new2.md Phase 5/6/7).
  *
- * The frontend only submits requests and renders responses — it never
- * calculates risk, threat, or factor eligibility (docs/EXECUTION.md PART 3).
- * The Vite dev server proxies /api and /health to the API on port 4000.
+ * All product decisions come from API responses; the frontend never computes
+ * decisions. Every call surfaces the frozen error shape.
  */
 import type {
-  AuditEvent,
-  CreateChallengeRequest,
   CreateChallengeResponse,
   CreateDecisionRequest,
-  CreateDecisionResponse,
-  FactorId,
-  PasskeyRegisterOptionsResponse,
-  PasskeyRegisterVerifyRequest,
-  PasskeyRegisterVerifyResponse,
+  CreateReplayRequest,
+  DecisionDiff,
+  DecisionResponse,
+  ReplayRecord,
   VerifyChallengeResponse,
 } from "@mfa/contracts";
 
+export interface ApiErrorBody {
+  error: { code: string; message: string; details?: unknown; correlationId?: string };
+}
+
 export class ApiError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-    readonly details?: unknown
-  ) {
-    super(message);
+  readonly code: string;
+  readonly details: unknown;
+  readonly status: number;
+
+  constructor(status: number, body: ApiErrorBody) {
+    super(body.error.message);
     this.name = "ApiError";
+    this.code = body.error.code;
+    this.details = body.error.details;
+    this.status = status;
   }
 }
 
@@ -35,102 +37,103 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
-  if (!res.ok) {
-    let body: { error?: { code?: string; message?: string; details?: unknown } } = {};
-    try {
-      body = (await res.json()) as typeof body;
-    } catch {
-      // non-JSON error body
-    }
-    throw new ApiError(
-      res.status,
-      body.error?.code ?? "HTTP_ERROR",
-      body.error?.message ?? `Request failed with status ${res.status}`,
-      body.error?.details
-    );
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // non-JSON body
   }
-  return (await res.json()) as T;
-}
-
-export interface DemoUser {
-  id: string;
-  name: string;
-  passkeyEnrolled: boolean;
-  /** Real WebAuthn credentials (public data only) — drives ceremony vs fallback. */
-  passkeys: { id: string; createdAt: string }[];
-  devices: { id: string; trusted: boolean; browserFingerprint: string }[];
-}
-
-export interface BaselineResult {
-  requiredAssurance: number;
-  requirement: string;
-}
-
-export interface StoredSignal {
-  name: string;
-  value: unknown;
-  source: string;
-  synthetic: boolean;
-  observedAt: string;
+  if (!res.ok) {
+    throw new ApiError(res.status, (body ?? { error: { code: "INTERNAL_ERROR", message: `HTTP ${res.status}` } }) as ApiErrorBody);
+  }
+  return body as T;
 }
 
 export const api = {
-  health: () => request<{ status: string; database: string }>("/health"),
+  health(): Promise<{ status: string; service: string; database: string; time: string }> {
+    return request("/health");
+  },
 
-  createDecision: (req: CreateDecisionRequest) =>
-    request<CreateDecisionResponse>("/api/v1/decisions", {
+  createDecision(req: CreateDecisionRequest): Promise<DecisionResponse> {
+    return request("/api/v1/decisions", { method: "POST", body: JSON.stringify(req) });
+  },
+
+  getDecision(decisionId: string): Promise<DecisionResponse> {
+    return request(`/api/v1/decisions/${decisionId}`);
+  },
+
+  getTrace(decisionId: string): Promise<DecisionResponse["trace"]> {
+    return request(`/api/v1/decisions/${decisionId}/trace`);
+  },
+
+  createChallenge(decisionId: string, factor: string, preferSimulated = false): Promise<CreateChallengeResponse> {
+    return request("/api/v1/challenges", {
       method: "POST",
-      body: JSON.stringify(req),
-    }),
+      body: JSON.stringify({ decisionId, factor, preferSimulated }),
+    });
+  },
 
-  getDecision: (id: string) =>
-    request<CreateDecisionResponse>(`/api/v1/decisions/${id}`),
-
-  getAudit: (id: string) =>
-    request<AuditEvent[]>(`/api/v1/decisions/${id}/audit`),
-
-  getSignals: (id: string) =>
-    request<StoredSignal[]>(`/api/v1/decisions/${id}/signals`),
-
-  createChallenge: (req: CreateChallengeRequest) =>
-    request<CreateChallengeResponse>("/api/v1/challenges", {
-      method: "POST",
-      body: JSON.stringify(req),
-    }),
-
-  verifyChallenge: (challengeId: string, response: unknown) =>
-    request<VerifyChallengeResponse>(`/api/v1/challenges/${challengeId}/verify`, {
+  verifyChallenge(challengeId: string, response: unknown): Promise<VerifyChallengeResponse> {
+    return request(`/api/v1/challenges/${challengeId}/verify`, {
       method: "POST",
       body: JSON.stringify({ challengeId, response }),
-    }),
+    });
+  },
 
-  demoUsers: () => request<{ users: DemoUser[] }>("/api/v1/demo/users"),
+  getDemoScenarios(): Promise<{ scenarios: { id: string; label: string; description: string }[] }> {
+    return request("/api/v1/demo/scenarios");
+  },
 
-  baseline: (riskLevel: "LOW" | "MEDIUM" | "HIGH") =>
-    request<BaselineResult>(`/api/v1/demo/baseline?riskLevel=${riskLevel}`),
+  resetDemo(): Promise<{ reset: boolean; at: string }> {
+    return request("/api/v1/demo/reset", { method: "POST" });
+  },
 
-  setPasskeyEnrolled: (userId: string, enrolled: boolean) =>
-    request<{ userId: string; passkeyEnrolled: boolean }>(
-      `/api/v1/demo/users/${userId}/passkey-enrollment`,
-      { method: "POST", body: JSON.stringify({ enrolled }) }
-    ),
-
-  /** Begin a real WebAuthn registration ceremony for a demo user. */
-  passkeyRegisterOptions: (userId: string) =>
-    request<PasskeyRegisterOptionsResponse>("/api/v1/passkeys/register/options", {
+  passkeyRegisterOptions(userId: string): Promise<{ ceremonyId: string; options: unknown }> {
+    return request("/api/v1/passkeys/register/options", {
       method: "POST",
       body: JSON.stringify({ userId }),
-    }),
+    });
+  },
 
-  /** Verify + persist the credential returned by the browser ceremony. */
-  passkeyRegisterVerify: (req: PasskeyRegisterVerifyRequest) =>
-    request<PasskeyRegisterVerifyResponse>("/api/v1/passkeys/register/verify", {
+  passkeyRegisterVerify(body: {
+    ceremonyId: string;
+    response: unknown;
+  }): Promise<{ registered: boolean; credentialId: string; passkeyEnrolled: boolean }> {
+    return request("/api/v1/passkeys/register/verify", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  createReplay(decisionId: string, req: CreateReplayRequest): Promise<ReplayRecord> {
+    return request(`/api/v1/decisions/${decisionId}/replays`, {
       method: "POST",
       body: JSON.stringify(req),
-    }),
+    });
+  },
 
-  reset: () =>
-    request<{ reset: boolean }>("/api/v1/demo/reset", { method: "POST" }),
+  getReplayDiff(replayId: string): Promise<DecisionDiff> {
+    return request(`/api/v1/replays/${replayId}/diff`);
+  },
+
+  getReplay(replayId: string): Promise<{ replay: ReplayRecord; decision: DecisionResponse }> {
+    return request(`/api/v1/replays/${replayId}`);
+  },
+
+  verifyRemediation(
+    decisionId: string,
+    factorId: string
+  ): Promise<{
+    decisionId: string;
+    factorId: string;
+    verified: boolean;
+    wouldBecomeEligible: boolean;
+    wouldBeSelected: boolean;
+    changeSets: { capabilityChanges?: { capabilityId: string; available: boolean }[]; evidenceChanges?: { type: string; value: unknown }[] }[];
+  }> {
+    return request(`/api/v1/decisions/${decisionId}/remediations/${factorId}/verify`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+  },
 };
-
-export type { FactorId };

@@ -1,380 +1,400 @@
 /**
- * Decision panel (docs/EXECUTION.md Phase 5/9, Phase 7 WebAuthn).
+ * Live Decision view (EXECUTION_new2.md Phase 5).
  *
- * Renders ONLY what the backend returned: risk, threat, factor eligibility,
- * selected factor / recovery, persisted audit trail, and signal provenance.
- * Factor challenges are executed through the API so the backend enforces
- * blocked-factor policy (the wow-moment proof).
- *
- * Phase 7: a PASSKEY challenge comes back in mode WEBAUTHN (real ceremony) or
- * mode SIMULATED (labeled automatic fallback). The panel runs the browser
- * ceremony for WEBAUTHN challenges, and if that ceremony cannot complete it
- * offers the explicitly labeled simulated fallback through the API — the
- * fallback is never hidden or ambiguous.
+ * Renders ONLY what the backend returned: risk, independent threat
+ * assessments, trust domain states, factor evaluations, the selected factor
+ * or assisted recovery, and the full structured causality trace. The factor
+ * inspector and challenge execution sections are composed in below.
  */
-import { useState } from "react";
-import type {
-  CreateChallengeResponse,
-  FactorDecision,
-  FactorId,
-} from "@mfa/contracts";
+import { useEffect, useState } from "react";
+import type { DecisionResponse, EvidenceItem, FactorEvaluation } from "@mfa/contracts";
+import type { SlotKey } from "../types";
 import { api, ApiError } from "../lib/api";
-import { getPasskeyAssertion } from "../lib/webauthn";
-import type { DecisionRecord, SlotKey } from "../types";
-import { AuditTimeline } from "./AuditTimeline";
+import { CausalityTrace } from "./CausalityTrace";
+import { ChallengePanel } from "./ChallengePanel";
+import { FactorInspector } from "./FactorInspector";
 import { JsonInspector } from "./JsonInspector";
+import { ReplayDiffPanel } from "./ReplayDiffPanel";
 
 interface Props {
-  record: DecisionRecord;
+  decision: DecisionResponse;
   slot: SlotKey;
-  onStale: (slot: SlotKey) => void;
+  onRefresh: () => void | Promise<void>;
 }
 
-const THREAT_COPY: Record<string, { label: string; distrusted: string; blurb: string }> = {
-  SIM_CHANNEL_COMPROMISE: {
-    label: "SIM channel compromise",
-    distrusted: "The phone number — SMS channel",
-    blurb:
-      "A recent SIM change places the SMS channel under suspicion, so one-time codes sent to the phone cannot be trusted.",
-  },
-  PHISHING: {
-    label: "Phishing relay",
-    distrusted: "The SMS relay path — one-time code delivery",
-    blurb:
-      "A phishing-relay indicator means the one-time-code delivery path may be relayable to an attacker.",
-  },
-  INSUFFICIENT_EVIDENCE: {
-    label: "Insufficient evidence",
-    distrusted: "No channel is specifically under suspicion",
-    blurb:
-      "No supported primary indicator is present, so the policy stays conservative rather than inventing a confident hypothesis.",
-  },
+const THREAT_LABEL: Record<string, string> = {
+  SIM_CHANNEL_COMPROMISE: "SIM channel compromise",
+  PHISHING_RELAY: "Phishing relay",
+  DEVICE_INTEGRITY_CONCERN: "Device integrity concern",
 };
 
-const REASON_DISPLAY: Record<string, string> = {
-  sms_channel_untrusted: "SMS channel untrusted under this hypothesis",
-  factor_relayable: "SMS codes relayable under this hypothesis",
-  passkey_not_enrolled: "Not enrolled",
-  assurance_too_low: "Below required assurance",
-  factor_eligible: "Eligible",
+const TRUST_LABEL: Record<string, string> = {
+  SIM_OWNERSHIP: "SIM ownership",
+  TELECOM_DELIVERY: "Telecom delivery",
+  DEVICE_INTEGRITY: "Device integrity",
+  CREDENTIAL_INTEGRITY: "Credential integrity",
+  ORIGIN_BINDING: "Origin binding",
+  SESSION_INTEGRITY: "Session integrity",
+  USER_VERIFICATION: "User verification",
+  KNOWLEDGE_SECRECY: "Knowledge secrecy",
+  NETWORK_AVAILABILITY: "Network availability",
+};
+
+const EVIDENCE_LABEL: Record<string, string> = {
+  RECENT_SIM_CHANGE: "Recent SIM change",
+  FIRST_SEEN_DEVICE: "First-seen device",
+  NEW_PAYEE: "New payee",
+  HIGH_VALUE_TRANSACTION: "High-value transaction",
+  PHISHING_RELAY_INDICATOR: "Phishing relay indicator",
+  FAILED_LOGIN_BURST: "Failed-login burst",
+  GEO_DISTANCE_ANOMALY: "Geo distance anomaly",
+  PASSKEY_ENROLLED: "Passkey enrolled",
+  WEBAUTHN_SUPPORTED: "WebAuthn supported",
+  NETWORK_AVAILABLE: "Network available",
 };
 
 function riskClass(level: string): string {
   return level === "HIGH" ? "risk-high" : level === "MEDIUM" ? "risk-medium" : "risk-low";
 }
 
-export function DecisionPanel({ record, slot, onStale }: Props) {
-  const { decision, baseline } = record;
-  const [phase, setPhase] = useState<
-    "idle" | "creating" | "ready" | "verifying" | "verified" | "rejected"
-  >("idle");
-  const [challenge, setChallenge] = useState<CreateChallengeResponse | null>(null);
-  const [verification, setVerification] = useState<string | null>(null);
-  const [flowError, setFlowError] = useState<{ code: string; message: string } | null>(null);
-  const [busyFactor, setBusyFactor] = useState<FactorId | null>(null);
-  /** The WebAuthn browser ceremony failed — offer the labeled simulated fallback. */
-  const [ceremonyInterrupted, setCeremonyInterrupted] = useState(false);
+export function DecisionPanel({ decision, slot, onRefresh }: Props) {
+  const [inspected, setInspected] = useState<FactorEvaluation | null>(null);
 
-  const threat = THREAT_COPY[decision.threat.type] ?? THREAT_COPY.INSUFFICIENT_EVIDENCE;
-
-  async function runChallenge(factor: FactorId, preferSimulated = false) {
-    setBusyFactor(factor);
-    setFlowError(null);
-    setCeremonyInterrupted(false);
-    setPhase("creating");
-    try {
-      const created = await api.createChallenge({
-        decisionId: decision.decisionId,
-        factor,
-        ...(preferSimulated ? { preferSimulated: true } : {}),
-      });
-      setChallenge(created);
-      setPhase("ready");
-    } catch (err) {
-      setFlowError(extractError(err));
-      setPhase("rejected");
-    } finally {
-      setBusyFactor(null);
-    }
-  }
-
-  async function verifySimulated() {
-    if (!challenge) return;
-    setPhase("verifying");
-    try {
-      const result = await api.verifyChallenge(challenge.challengeId, {
-        simulatedOk: true,
-      });
-      setVerification(`${result.verified ? "AUTHORIZED" : "DENIED"} · ${result.transactionStatus}`);
-      setPhase("verified");
-      onStale(slot);
-    } catch (err) {
-      setFlowError(extractError(err));
-      setPhase("rejected");
-    }
-  }
-
-  async function verifyWebAuthn() {
-    if (!challenge) return;
-    setPhase("verifying");
-    setFlowError(null);
-    try {
-      const assertion = await getPasskeyAssertion(challenge.publicOptions);
-      const result = await api.verifyChallenge(challenge.challengeId, assertion);
-      setVerification(`${result.verified ? "AUTHORIZED" : "DENIED"} · ${result.transactionStatus}`);
-      setPhase("verified");
-      onStale(slot);
-    } catch (err) {
-      setFlowError(extractError(err));
-      setCeremonyInterrupted(true);
-      setPhase("rejected");
-    }
-  }
-
-  const blockedFactor = decision.factors.find((f) => f.status === "BLOCKED");
-  const isWebAuthn = challenge?.mode === "WEBAUTHN";
+  const selected = decision.factors.find((f) => f.factorId === decision.selectedFactorId);
 
   return (
     <article className={`decision-panel ${slot === "right" ? "slot-right" : "slot-left"}`}>
       <header className="panel-head">
         <div className="panel-head-main">
-          <span className="panel-kicker">Backend decision</span>
+          <span className="panel-kicker">Live decision</span>
           <code className="decision-id">{decision.decisionId}</code>
         </div>
         <div className="panel-head-meta">
-          <span className="chip">policy {decision.policyVersion}</span>
+          <span className="chip">
+            policy {decision.policy.version} · {decision.policy.bundleId}
+          </span>
           <span className="chip chip-muted">{decision.createdAt}</span>
         </div>
       </header>
 
-      {/* Risk */}
+      {/* Risk + action */}
       <section className="panel-section">
         <div className="section-row">
           <div className={`risk-badge ${riskClass(decision.risk.level)}`}>
             <span className="risk-label">RISK</span>
             <span className="risk-value">{decision.risk.level}</span>
           </div>
-          <div className="reason-list">
-            {decision.risk.reasons.length === 0 ? (
-              <span className="muted">No risk indicators triggered</span>
-            ) : (
-              decision.risk.reasons.map((r) => (
-                <span key={r} className="reason-chip">
-                  {r}
-                </span>
-              ))
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Threat */}
-      <section className="panel-section threat-section">
-        <div className="threat-grid">
-          <div className="threat-main">
-            <div className="section-title">Suspected threat</div>
-            <div className={`threat-badge threat-${decision.threat.type.toLowerCase()}`}>
-              {threat.label}
-            </div>
-            <div className="support-line">
-              support: <strong>{decision.threat.support}</strong>
-            </div>
-            <p className="threat-blurb">{threat.blurb}</p>
-            <div className="distrust">
-              <span className="distrust-label">Do not trust</span>
-              <span>{threat.distrusted}</span>
-            </div>
+          <div className="risk-detail">
             <div className="reason-list">
-              {decision.threat.evidence.map((e) => (
-                <span key={e} className="reason-chip evidence">
-                  {e}
-                </span>
-              ))}
+              {decision.risk.reasonCodes.length === 0 ? (
+                <span className="muted">No risk indicators triggered</span>
+              ) : (
+                decision.risk.reasonCodes.map((r) => (
+                  <span key={r} className="reason-chip">
+                    {r}
+                  </span>
+                ))
+              )}
+            </div>
+            <div className="action-line">
+              <span className="action-label">Action</span>
+              <strong className={`action action-${decision.action.toLowerCase()}`}>
+                {decision.action === "CHALLENGE"
+                  ? `Challenge — ${decision.selectedFactorId ?? "factor"}`
+                  : "Assisted recovery"}
+              </strong>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Factors */}
+      {/* Threat assessments */}
       <section className="panel-section">
-        <div className="section-title">Factor eligibility</div>
-        <div className="factor-cards">
-          {decision.factors.map((f) => (
-            <FactorCard key={f.factor} f={f} />
-          ))}
-        </div>
-        {phase !== "idle" && phase !== "verified" ? (
-          <div className={`flow-banner flow-${phase}`}>
-            {phase === "creating" ? (
-              <span>Creating challenge…</span>
-            ) : phase === "ready" && challenge ? (
-              <div className="flow-ready">
-                <div className="flow-ready-meta">
-                  {isWebAuthn ? (
-                    <span className="chip chip-real">REAL PASSKEY · WEBAUTHN</span>
-                  ) : (
-                    <span className="chip chip-sim">SIMULATED · labeled demo fallback</span>
-                  )}
-                  <code className="challenge-id">{challenge.challengeId}</code>
-                  <span className="muted">expires {challenge.expiresAt}</span>
-                </div>
-                {isWebAuthn ? (
-                  <p className="form-note">
-                    Real WebAuthn ceremony — your authenticator will be prompted.
-                  </p>
-                ) : (
-                  <p className="form-note">
-                    Simulated adapter fallback: no real ceremony runs for this challenge.
-                  </p>
-                )}
-                <button
-                  className="btn primary"
-                  onClick={isWebAuthn ? verifyWebAuthn : verifySimulated}
-                >
-                  {isWebAuthn ? "Verify with passkey (WebAuthn)" : "Verify with simulated passkey"}
-                </button>
-              </div>
-            ) : phase === "verifying" ? (
-              <span>
-                {isWebAuthn ? "Awaiting authenticator verification…" : "Verifying challenge…"}
-              </span>
-            ) : phase === "rejected" && flowError ? (
-              <div className="rejection">
-                {ceremonyInterrupted ? (
-                  <>
-                    <span className="rejection-title">
-                      WebAuthn ceremony did not complete — {flowError.code}
-                    </span>
-                    <span>{flowError.message}</span>
-                    <button
-                      className="btn ghost"
-                      onClick={() => void runChallenge("PASSKEY", true)}
-                    >
-                      Use the simulated passkey instead (demo fallback)
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <span className="rejection-title">
-                      {flowError.code} — blocked by persisted policy
-                    </span>
-                    <span>{flowError.message}</span>
-                  </>
-                )}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
-
-      {/* Outcome */}
-      <section className="panel-section">
-        <div className="section-title">Policy outcome</div>
-        {decision.selectedFactor ? (
-          <div className="outcome outcome-factor">
-            <div className="outcome-icon">✓</div>
-            <div className="outcome-body">
-              <div className="outcome-title">
-                {decision.selectedFactor} selected
-              </div>
-              <div className="outcome-sub">{decision.action}</div>
-              <div className="outcome-actions">
-                <button
-                  className="btn primary"
-                  disabled={busyFactor !== null || phase === "verified"}
-                  onClick={() => runChallenge(decision.selectedFactor!)}
-                >
-                  {phase === "verified"
-                    ? "Authorized"
-                    : `Continue with ${decision.selectedFactor}`}
-                </button>
-                {blockedFactor && phase !== "verified" ? (
-                  <button
-                    className="btn danger-ghost"
-                    disabled={busyFactor !== null}
-                    onClick={() => runChallenge(blockedFactor.factor)}
-                  >
-                    Try {blockedFactor.factor} (blocked)
-                  </button>
-                ) : null}
-              </div>
-              {verification ? (
-                <div className="verification-line">
-                  Challenge verified → transaction status:{" "}
-                  <strong>{verification}</strong>
-                </div>
-              ) : null}
-            </div>
-          </div>
+        <div className="section-title">Threat assessments</div>
+        {decision.threats.length === 0 ? (
+          <p className="muted">No threats assessed.</p>
         ) : (
-          <div className="outcome outcome-recovery">
-            <div className="outcome-icon">!</div>
-            <div className="outcome-body">
-              <div className="outcome-title">Assisted recovery required</div>
-              <div className="outcome-sub">
-                No factor survives the policy — the service never falls back to
-                an untrusted channel.
+          <div className="threat-grid">
+            {decision.threats.map((t) => (
+              <div key={t.threatId} className={`threat-card threat-${t.support.toLowerCase()}`}>
+                <div className="threat-top">
+                  <span className="threat-name">
+                    {THREAT_LABEL[t.threatId] ?? t.threatId}
+                  </span>
+                  <span className={`threat-support support-${t.support.toLowerCase()}`}>
+                    {t.support}
+                  </span>
+                </div>
+                <code className="threat-id">{t.threatId}</code>
+                <div className="threat-evidences">
+                  {t.supportingEvidenceIds.map((id) => (
+                    <span key={id} className="reason-chip evidence">
+                      ↑ {id}
+                    </span>
+                  ))}
+                  {t.conflictingEvidenceIds.map((id) => (
+                    <span key={id} className="reason-chip conflicting">
+                      ↓ {id}
+                    </span>
+                  ))}
+                </div>
               </div>
-            </div>
+            ))}
           </div>
         )}
       </section>
 
-      {/* Baseline */}
-      {baseline ? (
-        <section className="panel-section baseline-section">
-          <div className="baseline-label">Fair scalar baseline (risk level only)</div>
-          <div className="baseline-requirement">{baseline.requirement}</div>
-          <div className="baseline-note">
-            A severity-only policy reaches the same high-level requirement for
-            equal-risk transactions — it cannot express why a channel is untrusted.
-          </div>
-        </section>
-      ) : null}
-
-      {/* Provenance */}
+      {/* Trust domains */}
       <section className="panel-section">
-        <div className="section-title">Signal provenance</div>
-        <div className="signal-list">
-          {record.signals.map((s) => (
-            <div key={s.name} className="signal-row">
-              <code className="signal-name">{s.name}</code>
-              <code className="signal-value">{String(s.value)}</code>
-              <span className="signal-source">{s.source}</span>
-              {s.synthetic ? <span className="chip chip-sim">synthetic</span> : null}
+        <div className="section-title">Trust domains</div>
+        <div className="trust-grid">
+          {decision.trust.map((t) => (
+            <div key={t.domainId} className={`trust-cell trust-${t.state.toLowerCase()}`}>
+              <span className="trust-state">{t.state}</span>
+              <span className="trust-domain">{TRUST_LABEL[t.domainId] ?? t.domainId}</span>
+              <code className="trust-id">{t.domainId}</code>
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Factor inspector */}
+      <FactorInspector factors={decision.factors} onInspect={setInspected} />
+      {inspected ? (
+        <InspectedDetail
+          decisionId={decision.decisionId}
+          factor={inspected}
+          evidence={decision.evidence}
+          onClose={() => setInspected(null)}
+        />
+      ) : null}
+
+      {/* Challenge execution + enforcement */}
+      <ChallengePanel
+        decisionId={decision.decisionId}
+        factors={decision.factors}
+        selectedFactorId={decision.selectedFactorId}
+        action={decision.action}
+        onOutcome={onRefresh}
+      />
+
+      {/* Evidence provenance */}
+      <section className="panel-section">
+        <div className="section-title">Evidence provenance</div>
+        <div className="evidence-list">
+          {decision.evidence.map((e) => (
+            <EvidenceRow key={e.id} e={e} />
+          ))}
+        </div>
         <p className="form-note">
-          All signals above are synthetic demo data from mock provider adapters —
-          the service never claims live integrations.
+          All evidence is synthetic demo data from mock provider adapters — the
+          service never claims live integrations. Status is derived from the
+          validity window, not invented.
         </p>
       </section>
 
-      <AuditTimeline events={record.audit} />
-      <JsonInspector record={record.decision} />
+      {/* Replay & diff */}
+      <ReplayDiffPanel decision={decision} />
+
+      {/* Causality trace */}
+      <CausalityTrace events={decision.trace} />
+
+      <JsonInspector record={decision} />
+
+      {selected ? (
+        <div className="outcome-strip">
+          <span className="outcome-icon">✓</span>
+          <span>
+            Selected factor <strong>{selected.factorId}</strong> — assurance{" "}
+            {selected.assuranceSatisfied ? "satisfied" : "below"}, friction{" "}
+            {selected.frictionTier}
+          </span>
+        </div>
+      ) : null}
     </article>
   );
 }
 
-function FactorCard({ f }: { f: FactorDecision }) {
-  const cls = f.status.toLowerCase();
+function EvidenceRow({ e }: { e: EvidenceItem }) {
+  const value = e.value === null ? "null" : typeof e.value === "string" ? e.value : String(e.value);
   return (
-    <div className={`factor-card factor-${cls}`}>
-      <div className="factor-top">
-        <span className="factor-name">{f.factor}</span>
-        <span className={`factor-status status-${cls}`}>{f.status}</span>
+    <div className="evidence-row">
+      <span className={`ev-status ev-${e.status.toLowerCase()}`}>{e.status}</span>
+      <div className="evidence-main">
+        <div className="evidence-name">
+          {EVIDENCE_LABEL[e.type] ?? e.type}
+          <code className="evidence-type">{e.type}</code>
+        </div>
+        <code className="evidence-value">{value}</code>
       </div>
-      <code className="factor-reason-code">{f.reasonCode}</code>
-      <p className="factor-reason">{f.reason}</p>
-      <span className="factor-label">{REASON_DISPLAY[f.reasonCode] ?? f.reasonCode}</span>
+      <div className="evidence-meta">
+        <span className="evidence-provider">
+          {e.providerId} · {e.providerType}
+        </span>
+        {e.synthetic ? <span className="chip chip-sim">synthetic</span> : null}
+        <span className="chip chip-muted">{e.quality}</span>
+      </div>
     </div>
   );
 }
 
-function extractError(err: unknown): { code: string; message: string } {
-  if (err instanceof ApiError) {
-    return { code: err.code, message: err.message };
-  }
-  return { code: "UNKNOWN", message: err instanceof Error ? err.message : String(err) };
+function InspectedDetail({
+  decisionId,
+  factor,
+  evidence,
+  onClose,
+}: {
+  decisionId: string;
+  factor: FactorEvaluation;
+  evidence: EvidenceItem[];
+  onClose: () => void;
+}) {
+  const byId = new Map(evidence.map((e) => [e.id, e]));
+  return (
+    <>
+      <RemediationBox decisionId={decisionId} factor={factor} />
+      <InspectedBody factor={factor} byId={byId} onClose={onClose} />
+    </>
+  );
+}
+
+function RemediationBox({ decisionId, factor }: { decisionId: string; factor: FactorEvaluation }) {
+  const [remediation, setRemediation] = useState<null | {
+    verified: boolean;
+    wouldBecomeEligible: boolean;
+    wouldBeSelected: boolean;
+    changeSets: { capabilityChanges?: { capabilityId: string; available: boolean }[]; evidenceChanges?: { type: string; value: unknown }[] }[];
+    error?: string;
+  }>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRemediation(null);
+    if (factor.status === "ELIGIBLE" || factor.failedRequirements.length === 0) {
+      return;
+    }
+    api
+      .verifyRemediation(decisionId, factor.factorId)
+      .then((r) => {
+        if (!cancelled) setRemediation(r);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setRemediation({
+            verified: false,
+            wouldBecomeEligible: false,
+            wouldBeSelected: false,
+            changeSets: [],
+            error: err instanceof ApiError ? err.message : "Remediation check failed",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [decisionId, factor.factorId, factor.status, factor.failedRequirements]);
+
+  if (remediation === null) return null;
+
+  return (
+    <div className="inspected-remediation">
+      <div className="remediation-head">
+        <span className="remediation-icon">↻</span>
+        <span>Verified remediation</span>
+        {remediation.error ? (
+          <span className="chip chip-muted">replay unavailable</span>
+        ) : (
+          <span className={`chip ${remediation.wouldBeSelected ? "chip-ok" : remediation.wouldBecomeEligible ? "chip-diff" : "chip-muted"}`}>
+            {remediation.wouldBeSelected
+              ? "would be selected"
+              : remediation.wouldBecomeEligible
+                ? "would become eligible"
+                : "remains ineligible"}
+          </span>
+        )}
+      </div>
+      {remediation.error ? (
+        <p className="muted">{remediation.error}</p>
+      ) : remediation.changeSets.length === 0 ? (
+        <p className="muted">
+          No change to evidence or capabilities was verified to make this
+          factor eligible — other conditions still fail.
+        </p>
+      ) : (
+        <ul className="remediation-sets">
+          {remediation.changeSets.map((set, i) => (
+            <li key={i} className="remediation-set">
+              {set.capabilityChanges?.length ? (
+                <span className="remediation-change">
+                  {set.capabilityChanges.map((c) => (
+                    <code key={c.capabilityId}>
+                      {c.capabilityId} → {c.available ? "available" : "unavailable"}
+                    </code>
+                  ))}
+                </span>
+              ) : null}
+              {set.evidenceChanges?.length ? (
+                <span className="remediation-change">
+                  {set.evidenceChanges.map((c) => (
+                    <code key={c.type}>
+                      {c.type} → {String(c.value)}
+                    </code>
+                  ))}
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function InspectedBody({
+  factor,
+  byId,
+  onClose,
+}: {
+  factor: FactorEvaluation;
+  byId: Map<string, EvidenceItem>;
+  onClose: () => void;
+}) {
+  return (
+    <div className="inspected-detail" role="dialog" aria-label={`${factor.factorId} detail`}>
+      <div className="inspected-head">
+        <span className="panel-kicker">Factor detail — {factor.factorId}</span>
+        <button className="btn ghost small" onClick={onClose} type="button">
+          Close
+        </button>
+      </div>
+      <div className="inspected-failed">
+        {factor.failedRequirements.length === 0 ? (
+          <p className="muted">
+            No failed requirements — this factor passed every declared gate.
+          </p>
+        ) : (
+          factor.failedRequirements.map((r) => (
+            <div key={r.requirementId} className="inspected-req">
+              <code>{r.requirementId}</code>
+              <span>
+                required <strong>{r.requiredState}</strong> · actual{" "}
+                <strong className="actual">{r.actualState}</strong>
+              </span>
+              <code className="trace-code">{r.reasonCode}</code>
+              <div className="inspected-req-refs">
+                {r.evidenceIds.map((id) => (
+                  <span key={id} className="req-ref">
+                    <code>{id}</code>{" "}
+                    {byId.has(id) ? (
+                      <span className="muted">{EVIDENCE_LABEL[byId.get(id)!.type] ?? byId.get(id)!.type}</span>
+                    ) : null}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
 }

@@ -1,96 +1,44 @@
 /**
- * Hero scenario presets (docs/EXECUTION.md Phase 5).
+ * Scenario presets (EXECUTION_new2.md §5.6, Phase 5).
  *
- * These are REQUEST payloads. Both scenarios share the same aggregate risk
- * (₹50,000, new payee) while the threat composition differs. All decisions
- * are computed by the backend — this file only supplies inputs.
+ * The three judge presets mirror @mfa/demo-data (the backend owns the exact
+ * request shapes); the frontend just produces a fresh client transaction id
+ * per submission so idempotency never blocks a repeat demo.
  */
+import {
+  CONSTRAINED_SCENARIO_ID,
+  constrainedCapabilityScenario,
+  PHISHING_SCENARIO_ID,
+  phishingScenario,
+  SIM_SWAP_SCENARIO_ID,
+  simSwapScenario,
+} from "@mfa/demo-data";
 import type { CreateDecisionRequest } from "@mfa/contracts";
 
-const AMOUNT_RUPEES_50000_MINOR = 5_000_000;
-
-export function simSwapPreset(): CreateDecisionRequest {
-  return {
-    userId: "user_demo_01",
-    transaction: {
-      clientTransactionId: `hero_simswap_${Date.now()}`,
-      amountMinor: AMOUNT_RUPEES_50000_MINOR,
-      currency: "INR",
-      payeeId: "payee_new_77",
-      payeeIsKnown: false,
-    },
-    session: {
-      sessionId: "sess_unusual_01",
-      ageSeconds: 120,
-      failedLoginCount: 2,
-      ipAddress: "198.51.100.44",
-      asn: "AS16509",
-      country: "US",
-    },
-    device: {
-      deviceId: "dev_new_01",
-      trusted: false,
-      firstSeen: true,
-      browserFingerprint: "fp-unregistered-mobile-42c1",
-    },
-    signals: {
-      recentSimChange: true,
-      geoDistanceFromLastLoginKm: null,
-      phishingRelayIndicator: false,
-    },
-  };
-}
-
-export function phishingPreset(): CreateDecisionRequest {
-  return {
-    userId: "user_demo_01",
-    transaction: {
-      clientTransactionId: `hero_phishing_${Date.now()}`,
-      amountMinor: AMOUNT_RUPEES_50000_MINOR,
-      currency: "INR",
-      payeeId: "payee_new_88",
-      payeeIsKnown: false,
-    },
-    session: {
-      sessionId: "sess_unusual_02",
-      ageSeconds: 60,
-      failedLoginCount: 2,
-      ipAddress: "203.0.113.9",
-      asn: "AS14061",
-      country: "IN",
-    },
-    device: {
-      deviceId: "dev_trusted_01",
-      trusted: true,
-      firstSeen: false,
-      browserFingerprint: "fp-home-chrome-win-7a9f",
-    },
-    signals: {
-      recentSimChange: null,
-      geoDistanceFromLastLoginKm: null,
-      phishingRelayIndicator: true,
-    },
-  };
-}
-
 export interface ScenarioMeta {
-  key: string;
+  id: string;
   label: string;
   tagline: string;
   build: () => CreateDecisionRequest;
 }
 
-export const HERO_SCENARIOS: ScenarioMeta[] = [
+export const DEMO_PRESETS: ScenarioMeta[] = [
   {
-    key: "sim-swap",
+    id: SIM_SWAP_SCENARIO_ID,
     label: "SIM swap",
     tagline: "Recent SIM change + new device",
-    build: simSwapPreset,
+    build: () => simSwapScenario.build(`web_${Date.now()}_${Math.floor(Math.random() * 1e6)}`),
   },
   {
-    key: "phishing",
+    id: PHISHING_SCENARIO_ID,
     label: "Phishing relay",
-    tagline: "Relay indicator + unusual session",
-    build: phishingPreset,
+    tagline: "Relay indicator — same ₹50k risk",
+    build: () => phishingScenario.build(`web_${Date.now()}_${Math.floor(Math.random() * 1e6)}`),
+  },
+  {
+    id: CONSTRAINED_SCENARIO_ID,
+    label: "No passkey",
+    tagline: "SIM change, passkey not enrolled",
+    build: () => constrainedCapabilityScenario.build(`web_${Date.now()}_${Math.floor(Math.random() * 1e6)}`),
   },
 ];

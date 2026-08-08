@@ -1,18 +1,18 @@
 /**
- * Threat-Aware MFA Decision Service — client (docs/EXECUTION.md Phase 5/9).
+ * Threat-Aware MFA Decision Service — client (EXECUTION_new2.md Phase 5/9).
  *
  * The client submits transactions to the backend and renders what the API
- * returns. No decision logic lives here: risk, threat, factor eligibility,
- * and the scalar baseline are all computed by the API.
+ * returns. No decision logic lives here: risk, threat, trust, factor
+ * eligibility, selection, and the trace are all computed by the API.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CreateDecisionRequest } from "@mfa/contracts";
-import { api, ApiError, type DemoUser } from "./lib/api";
-import { HERO_SCENARIOS } from "./lib/presets";
+import { DEMO_USERS } from "@mfa/demo-data";
+import { api, ApiError } from "./lib/api";
+import { DEMO_PRESETS } from "./lib/presets";
 import type { DecisionRecord, FormState, SlotKey } from "./types";
-import { ComparisonBanner } from "./components/ComparisonBanner";
-import { PasskeyPanel } from "./components/PasskeyPanel";
 import { DecisionPanel } from "./components/DecisionPanel";
+import { PasskeyPanel } from "./components/PasskeyPanel";
 import { TransactionForm } from "./components/TransactionForm";
 
 const DEFAULT_FORM: FormState = {
@@ -20,8 +20,6 @@ const DEFAULT_FORM: FormState = {
   amountRupees: 50000,
   payeeIsKnown: false,
   deviceId: "dev_new_01",
-  deviceTrusted: false,
-  deviceFirstSeen: true,
   sessionId: "sess_unusual_01",
   ageSeconds: 120,
   failedLoginCount: 2,
@@ -29,63 +27,36 @@ const DEFAULT_FORM: FormState = {
   asn: "AS16509",
   country: "US",
   recentSimChange: "true",
-  geoDistance: "unknown",
   phishingRelay: false,
+  geoDistanceKm: "unknown",
 };
 
 export function App() {
-  const [users, setUsers] = useState<DemoUser[]>([]);
   const [health, setHealth] = useState<string>("checking");
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
-  const [slots, setSlots] = useState<{ left: DecisionRecord | null; right: DecisionRecord | null }>({
-    left: null,
-    right: null,
-  });
+  const [slots, setSlots] = useState<{
+    left: DecisionRecord | null;
+    right: DecisionRecord | null;
+  }>({ left: null, right: null });
   const [submitting, setSubmitting] = useState(false);
   const [bannerError, setBannerError] = useState<string | null>(null);
   const [busyHero, setBusyHero] = useState<string | null>(null);
 
-  const loadUsers = useCallback(async () => {
-    try {
-      const res = await api.demoUsers();
-      setUsers(res.users);
-    } catch (err) {
-      setBannerError("Could not load demo identities — is the API running?");
-    }
-  }, []);
-
   useEffect(() => {
-    void loadUsers();
     api
       .health()
       .then((h) => setHealth(h.database === "ok" ? "online" : "degraded"))
       .catch(() => setHealth("offline"));
-  }, [loadUsers]);
+  }, []);
 
   async function evaluate(req: CreateDecisionRequest, slot: SlotKey) {
     setBannerError(null);
     setSubmitting(true);
     try {
       const decision = await api.createDecision(req);
-      const [audit, signals] = await Promise.all([
-        api.getAudit(decision.decisionId),
-        api.getSignals(decision.decisionId),
-      ]);
-      let baseline = null;
-      try {
-        baseline = await api.baseline(decision.risk.level);
-      } catch {
-        baseline = null;
-      }
       setSlots((s) => ({
         ...s,
-        [slot]: {
-          decision,
-          audit,
-          signals,
-          baseline,
-          createdAt: new Date().toISOString(),
-        },
+        [slot]: { decision, createdAt: new Date().toISOString() },
       }));
     } catch (err) {
       const message =
@@ -99,12 +70,10 @@ export function App() {
   }
 
   function formToRequest(clientTransactionId: string): CreateDecisionRequest {
-    const geo =
-      form.geoDistance === "far" ? 700 : form.geoDistance === "near" ? 120 : null;
     return {
       userId: form.userId,
+      clientTransactionId,
       transaction: {
-        clientTransactionId,
         amountMinor: Math.round(form.amountRupees * 100),
         currency: "INR",
         payeeId: form.payeeIsKnown ? "payee_known_01" : `payee_${Date.now()}`,
@@ -112,39 +81,30 @@ export function App() {
       },
       session: {
         sessionId: form.sessionId,
+        deviceId: form.deviceId,
         ageSeconds: form.ageSeconds,
         failedLoginCount: form.failedLoginCount,
         ipAddress: form.ipAddress,
         asn: form.asn,
         country: form.country,
       },
-      device: {
-        deviceId: form.deviceId,
-        trusted: form.deviceTrusted,
-        firstSeen: form.deviceFirstSeen,
-        browserFingerprint:
-          form.deviceId === "dev_trusted_01"
-            ? "fp-home-chrome-win-7a9f"
-            : "fp-unregistered-mobile-42c1",
-      },
-      signals: {
-        recentSimChange:
-          form.recentSimChange === "true"
-            ? true
-            : form.recentSimChange === "false"
-              ? false
-              : null,
-        geoDistanceFromLastLoginKm: geo,
-        phishingRelayIndicator: form.phishingRelay,
-      },
+      evidenceOverrides: [
+        { type: "RECENT_SIM_CHANGE", value: form.recentSimChange === "true" },
+        { type: "PHISHING_RELAY_INDICATOR", value: form.phishingRelay },
+        ...(form.recentSimChange === "true"
+          ? [{ type: "FIRST_SEEN_DEVICE" as const, value: true }]
+          : []),
+        ...(form.geoDistanceKm === "far"
+          ? [{ type: "GEO_DISTANCE_ANOMALY" as const, value: true }]
+          : []),
+      ],
     };
   }
 
   async function runHero(key: string) {
-    const scenario = HERO_SCENARIOS.find((s) => s.key === key);
+    const scenario = DEMO_PRESETS.find((s) => s.id === key);
     if (!scenario) return;
     setBusyHero(key);
-    // Fill the form so the presenter can narrate the inputs, then evaluate.
     const req = scenario.build();
     setForm(syncFormFromRequest(req));
     const slot: SlotKey = slots.left === null ? "left" : "right";
@@ -154,10 +114,9 @@ export function App() {
 
   async function handleReset() {
     try {
-      await api.reset();
+      await api.resetDemo();
       setSlots({ left: null, right: null });
       setBannerError(null);
-      await loadUsers();
     } catch (err) {
       setBannerError("Reset failed.");
     }
@@ -167,14 +126,19 @@ export function App() {
     const record = slots[slot];
     if (!record) return;
     try {
-      const audit = await api.getAudit(record.decision.decisionId);
+      const decision = await api.getDecision(record.decision.decisionId);
       setSlots((s) =>
-        s[slot] ? { ...s, [slot]: { ...(s[slot] as DecisionRecord), audit } } : s
+        s[slot] ? { ...s, [slot]: { decision, createdAt: s[slot]!.createdAt } } : s
       );
     } catch {
-      // audit refresh is best-effort
+      // refresh is best-effort (e.g. challenge outcome trace events)
     }
   }
+
+  const selectedUser = useMemo(
+    () => DEMO_USERS.find((u) => u.id === form.userId) ?? DEMO_USERS[0],
+    [form.userId]
+  );
 
   return (
     <div className="app">
@@ -201,24 +165,23 @@ export function App() {
 
       <section className="hero-strip">
         <div className="hero-strip-head">
-          <span className="panel-kicker">One-click hero scenarios</span>
+          <span className="panel-kicker">One-click judge scenarios</span>
           <p>
-            Same ₹50,000 · same new payee · same high-risk score. Different
-            suspected attack paths — created through the backend, compared side
-            by side.
+            Same ₹50,000 · same new payee · same high risk. Different suspected
+            attack paths — created through the backend, compared side by side.
           </p>
         </div>
         <div className="hero-buttons">
-          {HERO_SCENARIOS.map((s) => (
+          {DEMO_PRESETS.map((s) => (
             <button
-              key={s.key}
+              key={s.id}
               className="hero-card"
               disabled={busyHero !== null}
-              onClick={() => void runHero(s.key)}
+              onClick={() => void runHero(s.id)}
               type="button"
             >
               <span className="hero-card-title">
-                {busyHero === s.key ? "Evaluating…" : s.label}
+                {busyHero === s.id ? "Evaluating…" : s.label}
               </span>
               <span className="hero-card-sub">{s.tagline}</span>
             </button>
@@ -226,11 +189,7 @@ export function App() {
         </div>
       </section>
 
-      <PasskeyPanel
-        userId={form.userId}
-        users={users}
-        onChanged={loadUsers}
-      />
+      <PasskeyPanel userId={form.userId} users={DEMO_USERS} onChanged={() => undefined} />
 
       {bannerError ? (
         <div className="banner-error" role="alert">
@@ -238,21 +197,14 @@ export function App() {
         </div>
       ) : null}
 
-      {slots.left && slots.right ? (
-        <ComparisonBanner left={slots.left} right={slots.right} />
-      ) : null}
-
       <main className="layout">
         <aside className="form-column">
           <TransactionForm
-            users={users}
+            users={DEMO_USERS}
             form={form}
             onChange={setForm}
             onSubmit={(target) =>
-              void evaluate(
-                formToRequest(`custom_${target}_${Date.now()}`),
-                target
-              )
+              void evaluate(formToRequest(`custom_${target}_${Date.now()}`), target)
             }
             submitting={submitting}
           />
@@ -260,20 +212,29 @@ export function App() {
 
         <section className="panels-column">
           {slots.left ? (
-            <DecisionPanel record={slots.left} slot="left" onStale={refreshSlot} />
+            <DecisionPanel
+              decision={slots.left.decision}
+              slot="left"
+              onRefresh={() => refreshSlot("left")}
+            />
           ) : (
-            <EmptyPanel hint="Run a hero scenario or evaluate a transaction to see the backend decision." />
+            <EmptyPanel hint="Run a judge scenario or evaluate a transaction to see the backend decision." />
           )}
           {slots.right ? (
-            <DecisionPanel record={slots.right} slot="right" onStale={refreshSlot} />
+            <DecisionPanel
+              decision={slots.right.decision}
+              slot="right"
+              onRefresh={() => refreshSlot("right")}
+            />
           ) : null}
         </section>
       </main>
 
       <footer className="footer">
         <span>
-          Deterministic demonstration policy v{slots.left?.decision.policyVersion ?? "—"} ·
-          synthetic signals · no live provider, bank, or telecom integration
+          Deterministic demonstration policy v{slots.left?.decision.policy.version ?? "—"} ·
+          synthetic signals · no live provider, bank, or telecom integration ·
+          selected user: {selectedUser.name}
         </span>
       </footer>
     </div>
@@ -291,31 +252,23 @@ function EmptyPanel({ hint }: { hint: string }) {
 
 function syncFormFromRequest(req: CreateDecisionRequest): FormState {
   const s = req.session;
+  const overrides = req.evidenceOverrides ?? [];
+  const sim = overrides.find((o) => o.type === "RECENT_SIM_CHANGE");
+  const phish = overrides.find((o) => o.type === "PHISHING_RELAY_INDICATOR");
+  const geo = overrides.find((o) => o.type === "GEO_DISTANCE_ANOMALY");
   return {
     userId: req.userId,
     amountRupees: req.transaction.amountMinor / 100,
     payeeIsKnown: req.transaction.payeeIsKnown,
-    deviceId: req.device.deviceId,
-    deviceTrusted: req.device.trusted,
-    deviceFirstSeen: req.device.firstSeen,
+    deviceId: s.deviceId,
     sessionId: s.sessionId,
     ageSeconds: s.ageSeconds,
     failedLoginCount: s.failedLoginCount,
     ipAddress: s.ipAddress,
     asn: s.asn,
     country: s.country,
-    recentSimChange:
-      req.signals.recentSimChange === true
-        ? "true"
-        : req.signals.recentSimChange === false
-          ? "false"
-          : "unknown",
-    geoDistance:
-      req.signals.geoDistanceFromLastLoginKm === null
-        ? "unknown"
-        : (req.signals.geoDistanceFromLastLoginKm ?? 0) >= 500
-          ? "far"
-          : "near",
-    phishingRelay: req.signals.phishingRelayIndicator,
+    recentSimChange: sim?.value === true ? "true" : "false",
+    phishingRelay: phish?.value === true,
+    geoDistanceKm: geo?.value === true ? "far" : "unknown",
   };
 }

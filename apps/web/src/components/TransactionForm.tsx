@@ -1,11 +1,12 @@
 /**
- * Transaction submission form (docs/EXECUTION.md Phase 5).
+ * Transaction submission form (EXECUTION_new2.md Phase 5).
  *
- * Everything here is an INPUT to the backend decision service. The form never
+ * Everything here is an INPUT to the backend decision service. Demo evidence
+ * toggles map to the frozen evidence-override contract; the form never
  * computes a decision.
  */
 import type { ReactNode } from "react";
-import type { DemoUser } from "../lib/api";
+import type { DemoUser } from "@mfa/demo-data";
 import type { FormState } from "../types";
 
 interface Props {
@@ -34,13 +35,28 @@ function Field({
   );
 }
 
-export function TransactionForm({
-  users,
-  form,
-  onChange,
-  onSubmit,
-  submitting,
-}: Props) {
+function Toggle({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={`toggle ${active ? "active" : ""}`}
+      onClick={onClick}
+    >
+      <span className="toggle-dot" />
+      {children}
+    </button>
+  );
+}
+
+export function TransactionForm({ users, form, onChange, onSubmit, submitting }: Props) {
   const user = users.find((u) => u.id === form.userId);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
@@ -55,19 +71,17 @@ export function TransactionForm({
       }}
     >
       <div className="form-section-title">
-        <span>Transaction signals</span>
+        <span>Transaction context</span>
         <span className="form-section-note">submitted to POST /api/v1/decisions</span>
       </div>
 
       <div className="form-grid">
         <Field label="Customer (synthetic)">
-          <select
-            value={form.userId}
-            onChange={(e) => set("userId", e.target.value)}
-          >
+          <select value={form.userId} onChange={(e) => set("userId", e.target.value)}>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
-                {u.name} — {u.passkeyEnrolled ? "passkey enrolled" : "no passkey"}
+                {u.name} —{" "}
+                {u.capabilities.PASSKEY_ENROLLED ? "passkey enrolled" : "no passkey"}
               </option>
             ))}
           </select>
@@ -87,7 +101,7 @@ export function TransactionForm({
           <div className="segmented">
             <button
               type="button"
-              className={form.payeeIsKnown ? "" : "active"}
+              className={!form.payeeIsKnown ? "active" : ""}
               onClick={() => set("payeeIsKnown", false)}
             >
               New payee
@@ -107,21 +121,17 @@ export function TransactionForm({
             value={form.deviceId}
             onChange={(e) => {
               const id = e.target.value;
-              if (id === "dev_trusted_01") {
-                onChange({
-                  ...form,
-                  deviceId: id,
-                  deviceTrusted: true,
-                  deviceFirstSeen: false,
-                });
-              } else {
-                onChange({
-                  ...form,
-                  deviceId: id,
-                  deviceTrusted: false,
-                  deviceFirstSeen: true,
-                });
-              }
+              onChange({
+                ...form,
+                deviceId: id,
+                sessionId:
+                  id === "dev_trusted_01" ? "sess_home_01" : form.sessionId,
+                ageSeconds: id === "dev_trusted_01" ? 3600 : form.ageSeconds,
+                failedLoginCount: id === "dev_trusted_01" ? 0 : form.failedLoginCount,
+                ipAddress: id === "dev_trusted_01" ? "203.0.113.10" : form.ipAddress,
+                asn: id === "dev_trusted_01" ? "AS14061" : form.asn,
+                country: id === "dev_trusted_01" ? "IN" : form.country,
+              });
             }}
           >
             <option value="dev_trusted_01">Home laptop — trusted</option>
@@ -161,77 +171,23 @@ export function TransactionForm({
             <option value="sess_unusual_01">Unusual session (2 failed logins)</option>
           </select>
         </Field>
+      </div>
 
-        <Field label="Recent SIM change">
-          <div className="segmented tri">
-            <button
-              type="button"
-              className={form.recentSimChange === "false" ? "active" : ""}
-              onClick={() => set("recentSimChange", "false")}
-            >
-              No
-            </button>
-            <button
-              type="button"
-              className={form.recentSimChange === "unknown" ? "active" : ""}
-              onClick={() => set("recentSimChange", "unknown")}
-            >
-              Unknown
-            </button>
-            <button
-              type="button"
-              className={form.recentSimChange === "true" ? "active" : ""}
-              onClick={() => set("recentSimChange", "true")}
-            >
-              Yes
-            </button>
-          </div>
-        </Field>
+      <div className="form-section-title">
+        <span>Evidence overrides</span>
+        <span className="form-section-note">demo mode — synthetic signals</span>
+      </div>
 
-        <Field label="Geo distance from last login">
-          <div className="segmented tri">
-            <button
-              type="button"
-              className={form.geoDistance === "unknown" ? "active" : ""}
-              onClick={() => set("geoDistance", "unknown")}
-            >
-              Unknown
-            </button>
-            <button
-              type="button"
-              className={form.geoDistance === "near" ? "active" : ""}
-              onClick={() => set("geoDistance", "near")}
-            >
-              &lt; 500 km
-            </button>
-            <button
-              type="button"
-              className={form.geoDistance === "far" ? "active" : ""}
-              onClick={() => set("geoDistance", "far")}
-            >
-              ≥ 500 km
-            </button>
-          </div>
-        </Field>
-
-        <Field label="Phishing-relay indicator">
-          <div className="segmented">
-            <button
-              type="button"
-              className={!form.phishingRelay ? "active" : ""}
-              onClick={() => set("phishingRelay", false)}
-            >
-              Not observed
-            </button>
-            <button
-              type="button"
-              className={form.phishingRelay ? "active" : ""}
-              onClick={() => set("phishingRelay", true)}
-            >
-              Observed
-            </button>
-          </div>
-        </Field>
+      <div className="toggle-grid">
+        <Toggle active={form.recentSimChange === "true"} onClick={() => set("recentSimChange", form.recentSimChange === "true" ? "false" : "true")}>
+          Recent SIM change
+        </Toggle>
+        <Toggle active={form.phishingRelay} onClick={() => set("phishingRelay", !form.phishingRelay)}>
+          Phishing-relay indicator
+        </Toggle>
+        <Toggle active={form.geoDistanceKm === "far"} onClick={() => set("geoDistanceKm", form.geoDistanceKm === "far" ? "unknown" : "far")}>
+          Geo distance ≥ 500 km
+        </Toggle>
       </div>
 
       <div className="form-actions">
@@ -247,7 +203,7 @@ export function TransactionForm({
           Evaluate as second scenario →
         </button>
       </div>
-      {user && !user.passkeyEnrolled ? (
+      {user && !user.capabilities.PASSKEY_ENROLLED ? (
         <p className="form-note warn">
           {user.name} has no passkey enrolled — expect assisted recovery when
           SMS OTP is blocked.
