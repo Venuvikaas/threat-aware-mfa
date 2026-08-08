@@ -165,3 +165,65 @@ describe("POST /api/v1/decisions/:decisionId/replays", () => {
     expect(produced.body.action).toBe("CHALLENGE");
   });
 });
+
+describe("policy-version replay (Stretch B)", () => {
+  it("replays under candidate v1.1.0: POLICY section lists the rule delta, INPUT stays empty", async () => {
+    const { body: source } = await createSimDecision("ct_pp_1");
+    expect(source.policy.version).toBe("1.0.0");
+    expect(source.selectedFactorId).toBe("PASSKEY");
+
+    const res = await request(app)
+      .post(`/api/v1/decisions/${source.decisionId}/replays`)
+      .send({ mode: "EXACT", policyVersion: "1.1.0" });
+    expect(res.status).toBe(201);
+    expect(res.body.policyVersion).toBe("1.1.0");
+
+    const produced = await request(app).get(`/api/v1/decisions/${res.body.producedDecisionId}`);
+    expect(produced.status).toBe(200);
+    expect(produced.body.policy.version).toBe("1.1.0");
+    // The candidate rule degrades CREDENTIAL_INTEGRITY, which PASSKEY requires
+    // at >= TRUSTED, so the same inputs now end in assisted recovery.
+    expect(produced.body.selectedFactorId).toBeNull();
+    expect(produced.body.action).toBe("ASSISTED_RECOVERY");
+
+    const diff = await request(app).get(`/api/v1/replays/${res.body.replayId}/diff`);
+    expect(diff.status).toBe(200);
+    expect(diff.body.identical).toBe(false);
+
+    const sections = diff.body.sections as Array<{ section: string; changes: Array<{ path: string }> }>;
+    const policySection = sections.find((s) => s.section === "POLICY");
+    expect(policySection).toBeTruthy();
+    const policyPaths = (policySection?.changes ?? []).map((c) => c.path);
+    expect(policyPaths).toContain("policy.trustImpactRules.trust_sim_credentials");
+    expect(policyPaths.every((p) => p.startsWith("policy."))).toBe(true);
+
+    // No input changed — policy differences are never presented as input diffs.
+    expect(sections.some((s) => s.section === "INPUT")).toBe(false);
+    // Same evidence and threat rules: only trust/factor/selection moved.
+    expect(sections.some((s) => s.section === "THREAT")).toBe(false);
+    expect(sections.some((s) => s.section === "FACTOR")).toBe(true);
+    expect(sections.some((s) => s.section === "SELECTION")).toBe(true);
+  });
+
+  it("fork with both evidence and policy changes keeps INPUT and POLICY sections separate", async () => {
+    const { body: source } = await createSimDecision("ct_pp_2");
+    const res = await request(app)
+      .post(`/api/v1/decisions/${source.decisionId}/replays`)
+      .send({
+        mode: "FORK",
+        evidenceChanges: [{ type: "RECENT_SIM_CHANGE", value: false }],
+        policyVersion: "1.1.0",
+      });
+    expect(res.status).toBe(201);
+
+    const diff = await request(app).get(`/api/v1/replays/${res.body.replayId}/diff`);
+    expect(diff.status).toBe(200);
+    const sections = diff.body.sections as Array<{ section: string; changes: Array<{ path: string }> }>;
+    const inputSection = sections.find((s) => s.section === "INPUT");
+    const policySection = sections.find((s) => s.section === "POLICY");
+    expect(inputSection).toBeTruthy();
+    expect(policySection).toBeTruthy();
+    expect((policySection?.changes ?? []).every((c) => c.path.startsWith("policy."))).toBe(true);
+    expect((inputSection?.changes ?? []).every((c) => c.path.startsWith("evidence."))).toBe(true);
+  });
+});

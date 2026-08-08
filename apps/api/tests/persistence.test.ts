@@ -47,7 +47,7 @@ describe("schema + seed", () => {
     seedDemoData(db);
     seedDemoData(db);
     const bundles = db.prepare("SELECT COUNT(*) AS n FROM policy_bundles").get() as { n: number };
-    expect(bundles.n).toBe(1);
+    expect(bundles.n).toBe(2); // active v1.0.0 + DRAFT candidate v1.1.0 (Stretch B)
   });
 
   it("loads the active policy bundle with a verified content hash", () => {

@@ -69,6 +69,10 @@ export class ReplayService {
       throw notFoundError(`Policy version ${policyVersion} not found`);
     }
 
+    // Source bundle (Stretch B): the diff separates rule-level policy changes
+    // from input/derived changes. Both bundles are immutable and hash-verified.
+    const sourcePolicy = this.policies.findByVersion(source.policy.version);
+
     // Build the replay inputs from the source decision — never from fresh
     // providers, so the fork is a true counterfactual over the original.
     const now = new Date();
@@ -134,7 +138,7 @@ export class ReplayService {
       // Persist the structured diff against the immutable source.
       const produced = this.decisions.findById(producedDecisionId);
       if (produced) {
-        const diff = buildDecisionDiff(replayId, decisionId, source, produced);
+        const diff = buildDecisionDiff(replayId, decisionId, source, produced, sourcePolicy, policy);
         this.replays.saveDiff(replayId, decisionId, diff);
       }
     });
