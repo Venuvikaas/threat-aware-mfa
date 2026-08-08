@@ -16,6 +16,7 @@
  */
 import { useState } from "react";
 import type { CapabilityId, DecisionDiff, DecisionResponse } from "@mfa/contracts";
+import { CANDIDATE_POLICY_VERSION } from "@mfa/policy-bundles";
 import { api, ApiError } from "../lib/api";
 
 interface Props {
@@ -29,13 +30,22 @@ const SECTION_LABEL: Record<string, string> = {
   FACTOR: "Factor eligibility",
   RULE: "Activated rules",
   SELECTION: "Selection & outcome",
+  POLICY: "Policy rules (bundle diff)",
 };
+
+function renderDiffValue(value: unknown): string {
+  if (value === undefined) return "—";
+  if (value !== null && typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
 
 export function ReplayDiffPanel({ decision }: Props) {
   const [busy, setBusy] = useState<string | null>(null);
   const [diff, setDiff] = useState<DecisionDiff | null>(null);
   const [replayMeta, setReplayMeta] = useState<{ replayId: string; mode: string; producedDecisionId: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [policyVersion, setPolicyVersion] = useState<string>(decision.policy.version);
 
   async function run(mode: "EXACT" | "FORK", label: string, fork?: { capabilityId: CapabilityId; available: boolean }) {
     setBusy(label);
@@ -44,6 +54,7 @@ export function ReplayDiffPanel({ decision }: Props) {
       const record = await api.createReplay(decision.decisionId, {
         mode,
         ...(fork ? { capabilityChanges: [fork] } : {}),
+        ...(policyVersion !== decision.policy.version ? { policyVersion } : {}),
       });
       const result = await api.getReplayDiff(record.replayId);
       setDiff(result);
@@ -81,6 +92,17 @@ export function ReplayDiffPanel({ decision }: Props) {
       </p>
 
       <div className="replay-actions">
+        <label className="policy-version-field" title="Replay under a different immutable policy bundle">
+          <span className="muted">policy</span>
+          <select
+            value={policyVersion}
+            disabled={busy !== null}
+            onChange={(e) => setPolicyVersion(e.target.value)}
+          >
+            <option value={decision.policy.version}>{decision.policy.version} (source)</option>
+            <option value={CANDIDATE_POLICY_VERSION}>{CANDIDATE_POLICY_VERSION} (candidate)</option>
+          </select>
+        </label>
         <button
           className="btn ghost small"
           type="button"
@@ -150,10 +172,10 @@ export function ReplayDiffPanel({ decision }: Props) {
                         <code className="diff-path">{c.path}</code>
                         <div className="diff-values">
                           {c.before !== undefined ? (
-                            <span className="diff-before">before: {String(c.before)}</span>
+                            <span className="diff-before">before: {renderDiffValue(c.before)}</span>
                           ) : null}
                           {c.after !== undefined ? (
-                            <span className="diff-after">after: {String(c.after)}</span>
+                            <span className="diff-after">after: {renderDiffValue(c.after)}</span>
                           ) : null}
                         </div>
                       </li>

@@ -2143,3 +2143,20 @@ code {
   font-size: 11px;
   color: var(--green);
 }
+
+/* Stretch B: candidate-policy selector inside the replay actions. */
+.replay-actions .policy-version-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 10px;
+}
+.policy-version-field select {
+  padding: 4px 7px;
+  font: inherit;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  border: 1px solid var(--border, #d8dbe3);
+  background: var(--surface, #ffffff);
+  color: inherit;
+}
