@@ -33,6 +33,7 @@ export type ReplayRecord = z.infer<typeof zReplayRecord>;
 
 export const DIFF_SECTIONS = [
   "INPUT",
+  "POLICY",
   "THREAT",
   "TRUST",
   "FACTOR",
