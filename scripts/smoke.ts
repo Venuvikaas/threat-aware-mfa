@@ -1,18 +1,27 @@
 /**
- * End-to-end smoke script (docs/EXECUTION.md Phase 8).
+ * End-to-end smoke gate (EXECUTION_new2.md §8).
  *
  *   npm run smoke
  *
  * Boots the API on an ephemeral port with a fresh in-memory database, then
- * exercises the full judged path: reset → SIM-swap decision → phishing
- * decision → persisted audits → blocked-factor challenge rejection → simulated
- * passkey execution → assisted recovery. Prints PASS or FAIL and exits
- * non-zero on any failure.
+ * exercises the full judged path from a fresh demo database:
+ *
+ *   1. reset demo data
+ *   2. create the SIM-swap decision
+ *   3. verify SMS OTP is rejected (INELIGIBLE)
+ *   4. execute the selected simulated passkey
+ *   5. create the phishing decision (same risk, different trust effect)
+ *   6. exact-replay the first decision (semantically identical)
+ *   7. fork replay with passkey unavailable
+ *   8. verify assisted recovery
+ *   9. retrieve the decision diff
+ *   10. print PASS only when every assertion succeeds
  */
 import { fileURLToPath } from "node:url";
 import { createApp } from "../apps/api/src/app.js";
 import { openDatabase, runMigrations } from "../apps/api/src/db/connection.js";
-import type { CreateDecisionRequest } from "@mfa/contracts";
+import { seedDemoData } from "../apps/api/src/db/seed.js";
+import { simSwapScenario, phishingScenario, constrainedCapabilityScenario } from "@mfa/demo-data";
 
 const migrationsDir = fileURLToPath(
   new URL("../apps/api/src/db/migrations", import.meta.url)
@@ -26,83 +35,26 @@ interface Check {
 
 type JsonBody = Record<string, unknown> | null;
 
-function simSwapRequest(clientTransactionId: string, userId = "user_demo_01"): CreateDecisionRequest {
-  return {
-    userId,
-    transaction: {
-      clientTransactionId,
-      amountMinor: 5_000_000,
-      currency: "INR",
-      payeeId: "payee_new_77",
-      payeeIsKnown: false,
-    },
-    session: {
-      sessionId: "sess_unusual_01",
-      ageSeconds: 120,
-      failedLoginCount: 2,
-      ipAddress: "198.51.100.44",
-      asn: "AS16509",
-      country: "US",
-    },
-    device: {
-      deviceId: "dev_new_01",
-      trusted: false,
-      firstSeen: true,
-      browserFingerprint: "fp-unregistered-mobile-42c1",
-    },
-    signals: {
-      recentSimChange: true,
-      geoDistanceFromLastLoginKm: null,
-      phishingRelayIndicator: false,
-    },
-  };
-}
-
-function phishingRequest(clientTransactionId: string): CreateDecisionRequest {
-  return {
-    userId: "user_demo_01",
-    transaction: {
-      clientTransactionId,
-      amountMinor: 5_000_000,
-      currency: "INR",
-      payeeId: "payee_new_88",
-      payeeIsKnown: false,
-    },
-    session: {
-      sessionId: "sess_unusual_02",
-      ageSeconds: 60,
-      failedLoginCount: 2,
-      ipAddress: "203.0.113.9",
-      asn: "AS14061",
-      country: "IN",
-    },
-    device: {
-      deviceId: "dev_trusted_01",
-      trusted: true,
-      firstSeen: false,
-      browserFingerprint: "fp-home-chrome-win-7a9f",
-    },
-    signals: {
-      recentSimChange: null,
-      geoDistanceFromLastLoginKm: null,
-      phishingRelayIndicator: true,
-    },
-  };
-}
-
 interface DecisionBody extends JsonBody {
   decisionId?: string;
   risk?: { level?: string };
-  threat?: { type?: string };
-  factors?: { factor: string; status?: string; reasonCode?: string }[];
-  selectedFactor?: string | null;
+  threats?: { threatId: string; support: string }[];
+  trust?: { domainId: string; state: string }[];
+  factors?: { factorId: string; status: string; reasonCode?: string; failedRequirements?: { kind: string; reasonCode: string }[] }[];
+  selectedFactorId?: string | null;
   action?: string;
-  error?: { code?: string };
+  policy?: { version: string; contentHash: string };
+  trace?: unknown[];
+}
+
+function decisionBody(body: JsonBody): DecisionBody {
+  return (body ?? {}) as DecisionBody;
 }
 
 async function main(): Promise<number> {
   const db = openDatabase(":memory:");
   runMigrations(db, migrationsDir);
+  seedDemoData(db);
   const app = createApp({ db, demoMode: true });
   const server = app.listen(0);
   await new Promise<void>((resolve) => server.once("listening", () => resolve()));
@@ -128,108 +80,173 @@ async function main(): Promise<number> {
     } catch {
       // non-JSON body
     }
-    return { status: res.status, body: body as DecisionBody | JsonBody };
+    return { status: res.status, body };
   }
 
   try {
+    // 1. Reset demo data (deterministic restart).
     const reset = await api("/api/v1/demo/reset", { method: "POST" });
     expect("demo reset", reset.status === 200, `status ${reset.status}`);
 
-    // SIM-swap hero decision.
-    const sim = (await api("/api/v1/decisions", {
+    // 2. SIM-swap hero decision (backend scenario preset).
+    const sim = await api("/api/v1/decisions", {
       method: "POST",
-      body: JSON.stringify(simSwapRequest("smoke_sim_001")),
-    })) as { status: number; body: DecisionBody };
+      body: JSON.stringify(simSwapScenario.build("smoke_sim_001")),
+    });
+    const simBody = decisionBody(sim.body);
     expect("sim-swap decision created", sim.status === 201, `status ${sim.status}`);
-    expect("sim-swap risk HIGH", sim.body.risk?.level === "HIGH", JSON.stringify(sim.body.risk));
+    expect("sim-swap risk HIGH", simBody.risk?.level === "HIGH", JSON.stringify(simBody.risk));
     expect(
-      "sim-swap threat SIM_CHANNEL_COMPROMISE",
-      sim.body.threat?.type === "SIM_CHANNEL_COMPROMISE",
-      JSON.stringify(sim.body.threat)
-    );
-    const simSms = sim.body.factors?.find((f) => f.factor === "SMS_OTP");
-    expect(
-      "SMS OTP blocked (sms_channel_untrusted)",
-      simSms?.status === "BLOCKED" && simSms?.reasonCode === "sms_channel_untrusted",
-      JSON.stringify(simSms)
+      "SIM_CHANNEL_COMPROMISE support STRONG",
+      simBody.threats?.find((t) => t.threatId === "SIM_CHANNEL_COMPROMISE")?.support === "STRONG",
+      JSON.stringify(simBody.threats)
     );
     expect(
-      "passkey allowed",
-      sim.body.factors?.find((f) => f.factor === "PASSKEY")?.status === "ALLOWED"
+      "SIM_OWNERSHIP DISTRUSTED",
+      simBody.trust?.find((t) => t.domainId === "SIM_OWNERSHIP")?.state === "DISTRUSTED",
+      JSON.stringify(simBody.trust)
     );
-    expect("selected PASSKEY", sim.body.selectedFactor === "PASSKEY");
-    const simId = sim.body.decisionId ?? "";
+
+    // 3. SMS OTP rejected for the distrusted SIM dependency.
+    const sms = simBody.factors?.find((f) => f.factorId === "SMS_OTP");
+    expect(
+      "SMS OTP INELIGIBLE (trust requirement)",
+      sms?.status === "INELIGIBLE" &&
+        sms.failedRequirements?.some((r) => r.kind === "TRUST"),
+      JSON.stringify(sms)
+    );
+    expect(
+      "PASSKEY ELIGIBLE + selected",
+      simBody.factors?.find((f) => f.factorId === "PASSKEY")?.status === "ELIGIBLE" &&
+        simBody.selectedFactorId === "PASSKEY",
+      JSON.stringify({ factors: simBody.factors, selected: simBody.selectedFactorId })
+    );
+    const simId = simBody.decisionId ?? "";
     expect("sim-swap decision id present", simId.length > 0);
 
-    // Phishing hero decision.
-    const phish = (await api("/api/v1/decisions", {
+    // 4. Execute the selected simulated passkey.
+    const pk = await api("/api/v1/challenges", {
       method: "POST",
-      body: JSON.stringify(phishingRequest("smoke_phish_001")),
-    })) as { status: number; body: DecisionBody };
-    expect("phishing decision created", phish.status === 201, `status ${phish.status}`);
-    expect(
-      "phishing threat + relayable reason",
-      phish.body.threat?.type === "PHISHING" &&
-        phish.body.factors?.find((f) => f.factor === "SMS_OTP")?.reasonCode === "factor_relayable",
-      JSON.stringify(phish.body.threat)
-    );
-    expect("equal risk between heroes", sim.body.risk?.level === phish.body.risk?.level);
-
-    // Persisted audit trail.
-    if (simId) {
-      const audit = await api(`/api/v1/decisions/${simId}/audit`);
-      const types = (audit.body as unknown as { eventType: string }[])?.map((e) => e.eventType);
-      expect("audit starts with DECISION_CREATED", types?.[0] === "DECISION_CREATED", JSON.stringify(types));
-      expect("audit ends with FACTOR_SELECTED", types?.[types.length - 1] === "FACTOR_SELECTED", JSON.stringify(types));
-      const auditCheck = await api(`/api/v1/decisions/${simId}/audit`);
-      expect("audit stable across fetches", JSON.stringify(audit.body) === JSON.stringify(auditCheck.body));
-
-      // Wow moment: blocked factor cannot create a challenge.
-      const smsChallenge = await api("/api/v1/challenges", {
+      body: JSON.stringify({ decisionId: simId, factor: "PASSKEY" }),
+    });
+    expect("passkey challenge created (SIMULATED)", pk.status === 201, JSON.stringify(pk.body));
+    const pkId = (pk.body as { challengeId?: string })?.challengeId ?? "";
+    if (pkId) {
+      const verify = await api(`/api/v1/challenges/${pkId}/verify`, {
         method: "POST",
-        body: JSON.stringify({ decisionId: simId, factor: "SMS_OTP" }),
+        body: JSON.stringify({ challengeId: pkId, response: { simulatedOk: true } }),
       });
+      const v = verify.body as { verified?: boolean; transactionStatus?: string };
       expect(
-        "SMS challenge rejected with POLICY_REJECTION",
-        smsChallenge.status === 409 &&
-          (smsChallenge.body as { error?: { code?: string } })?.error?.code === "POLICY_REJECTION",
-        JSON.stringify(smsChallenge.body)
+        "passkey verification AUTHORIZED",
+        v.verified === true && v.transactionStatus === "AUTHORIZED",
+        JSON.stringify(verify.body)
       );
-
-      // Selected factor executes through the adapter.
-      const pk = await api("/api/v1/challenges", {
-        method: "POST",
-        body: JSON.stringify({ decisionId: simId, factor: "PASSKEY" }),
-      });
-      expect("passkey challenge created (SIMULATED)", pk.status === 201, JSON.stringify(pk.body));
-      const pkId = (pk.body as { challengeId?: string })?.challengeId ?? "";
-      if (pkId) {
-        const verify = await api(`/api/v1/challenges/${pkId}/verify`, {
-          method: "POST",
-          body: JSON.stringify({ challengeId: pkId, response: { simulatedOk: true } }),
-        });
-        const v = verify.body as { verified?: boolean; transactionStatus?: string };
-        expect(
-          "passkey verification AUTHORIZED",
-          v.verified === true && v.transactionStatus === "AUTHORIZED",
-          JSON.stringify(verify.body)
-        );
-      } else {
-        expect("passkey challenge id present", false, JSON.stringify(pk.body));
-      }
+    } else {
+      expect("passkey challenge id present", false, JSON.stringify(pk.body));
     }
 
-    // Assisted recovery when no factor survives.
-    const recovery = (await api("/api/v1/decisions", {
+    // 5. Phishing hero decision — same risk, different trust effect.
+    const phish = await api("/api/v1/decisions", {
       method: "POST",
-      body: JSON.stringify(simSwapRequest("smoke_recovery_001", "user_demo_02")),
-    })) as { status: number; body: DecisionBody };
+      body: JSON.stringify(phishingScenario.build("smoke_phish_001")),
+    });
+    const phishBody = decisionBody(phish.body);
+    expect("phishing decision created", phish.status === 201, `status ${phish.status}`);
     expect(
-      "unenrolled passkey → assisted recovery",
-      recovery.status === 201 &&
-        recovery.body.action === "REFER_TO_ASSISTED_RECOVERY" &&
-        recovery.body.selectedFactor === null,
-      JSON.stringify(recovery.body)
+      "equal risk between heroes",
+      simBody.risk?.level === phishBody.risk?.level,
+      `${simBody.risk?.level} vs ${phishBody.risk?.level}`
+    );
+    expect(
+      "phishing relay: TELECOM_DELIVERY DISTRUSTED, SIM_OWNERSHIP TRUSTED",
+      phishBody.trust?.find((t) => t.domainId === "TELECOM_DELIVERY")?.state === "DISTRUSTED" &&
+        phishBody.trust?.find((t) => t.domainId === "SIM_OWNERSHIP")?.state === "TRUSTED",
+      JSON.stringify(phishBody.trust)
+    );
+
+    // 6. Exact replay — determinism proof.
+    const exact = await api(`/api/v1/decisions/${simId}/replays`, {
+      method: "POST",
+      body: JSON.stringify({ mode: "EXACT" }),
+    });
+    expect("exact replay created", exact.status === 201, JSON.stringify(exact.body));
+    const exactId = (exact.body as { replayId?: string })?.replayId ?? "";
+    const exactDiff = await api(`/api/v1/replays/${exactId}/diff`);
+    expect(
+      "exact replay semantically identical",
+      exactDiff.status === 200 &&
+        (exactDiff.body as { identical?: boolean })?.identical === true,
+      JSON.stringify(exactDiff.body)
+    );
+
+    // 7. Fork replay: passkey enrolled -> false.
+    const fork = await api(`/api/v1/decisions/${simId}/replays`, {
+      method: "POST",
+      body: JSON.stringify({
+        mode: "FORK",
+        capabilityChanges: [{ capabilityId: "PASSKEY_ENROLLED", available: false }],
+      }),
+    });
+    expect("fork replay created", fork.status === 201, JSON.stringify(fork.body));
+    const forkId = (fork.body as { replayId?: string })?.replayId ?? "";
+    const producedId = (fork.body as { producedDecisionId?: string })?.producedDecisionId ?? "";
+    const produced = await api(`/api/v1/decisions/${producedId}`);
+
+    // 8. Assisted recovery under the fork.
+    const producedBody = decisionBody(produced.body);
+    expect(
+      "forked passkey UNAVAILABLE",
+      producedBody.factors?.find((f) => f.factorId === "PASSKEY")?.status === "UNAVAILABLE",
+      JSON.stringify(producedBody.factors)
+    );
+    expect(
+      "forked outcome ASSISTED_RECOVERY",
+      producedBody.action === "ASSISTED_RECOVERY" && producedBody.selectedFactorId === null,
+      JSON.stringify({ action: producedBody.action, selected: producedBody.selectedFactorId })
+    );
+
+    // 9. Decision diff separates derived-state changes; threat/trust unchanged.
+    const forkDiff = await api(`/api/v1/replays/${forkId}/diff`);
+    const diffBody = forkDiff.body as {
+      identical?: boolean;
+      sections?: { section: string; changes: unknown[] }[];
+    };
+    const sections = diffBody.sections?.map((s) => s.section) ?? [];
+    expect(
+      "fork diff non-identical with FACTOR + SELECTION sections",
+      forkDiff.status === 200 &&
+        diffBody.identical === false &&
+        sections.includes("FACTOR") &&
+        sections.includes("SELECTION"),
+      JSON.stringify(diffBody)
+    );
+    expect(
+      "fork diff keeps THREAT/TRUST unchanged",
+      !sections.includes("THREAT") && !sections.includes("TRUST"),
+      JSON.stringify(sections)
+    );
+
+    // Verified remediation: constrained user's passkey becomes eligible+selected.
+    const recovery = await api("/api/v1/decisions", {
+      method: "POST",
+      body: JSON.stringify(constrainedCapabilityScenario.build("smoke_con_001")),
+    });
+    const recoveryBody = decisionBody(recovery.body);
+    expect(
+      "capability-constrained -> assisted recovery",
+      recovery.status === 201 && recoveryBody.action === "ASSISTED_RECOVERY",
+      JSON.stringify(recoveryBody)
+    );
+    const rem = await api(
+      `/api/v1/decisions/${recoveryBody.decisionId ?? ""}/remediations/PASSKEY/verify`,
+      { method: "POST", body: JSON.stringify({}) }
+    );
+    expect(
+      "verified passkey remediation (would be selected)",
+      rem.status === 200 &&
+        (rem.body as { wouldBeSelected?: boolean })?.wouldBeSelected === true,
+      JSON.stringify(rem.body)
     );
   } catch (err) {
     failed = true;
