@@ -18,3 +18,5 @@ export * from "./buildTrace.js";
 export * from "./evaluateDecision.js";
 export * from "./predicates.js";
 export * from "./order.js";
+export * from "./diffDecisions.js";
+export * from "./verifyRemediation.js";
