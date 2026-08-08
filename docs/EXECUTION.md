@@ -1243,10 +1243,10 @@ Must:
 
 ### Exit gate
 
-- [ ] A senior engineer can understand the trust abstraction from the README.
-- [ ] API examples match actual contracts.
-- [ ] All mock and synthetic boundaries are explicit.
-- [ ] The demo script matches the shipped product exactly.
+- [x] A senior engineer can understand the trust abstraction from the README.
+- [x] API examples match actual contracts.
+- [x] All mock and synthetic boundaries are explicit.
+- [x] The demo script matches the shipped product exactly.
 
 ---
 
@@ -1343,60 +1343,60 @@ Verified result: Passkey becomes eligible and selected under this decision conte
 
 ## Decision intelligence
 
-- [ ] Supported threats are assessed independently.
-- [ ] Every threat assessment cites supporting and conflicting evidence.
-- [ ] Trust states are ordinal and reasoned, not numeric percentages.
-- [ ] Factor eligibility is derived from declarative dependencies.
-- [ ] Capability, assurance, and trust failures remain distinct.
-- [ ] Friction applies only after hard eligibility gates.
-- [ ] No factor-specific branch exists in the evaluator.
+- [x] Supported threats are assessed independently.
+- [x] Every threat assessment cites supporting and conflicting evidence.
+- [x] Trust states are ordinal and reasoned, not numeric percentages.
+- [x] Factor eligibility is derived from declarative dependencies.
+- [x] Capability, assurance, and trust failures remain distinct.
+- [x] Friction applies only after hard eligibility gates.
+- [x] No factor-specific branch exists in the evaluator.
 
 ## Policy integrity
 
-- [ ] Every decision stores bundle ID, version, and content hash.
-- [ ] Active policies are immutable.
-- [ ] Every factor and trace output references evaluated rules.
-- [ ] Policy validation rejects corrupt references.
+- [x] Every decision stores bundle ID, version, and content hash.
+- [x] Active policies are immutable.
+- [x] Every factor and trace output references evaluated rules.
+- [x] Policy validation rejects corrupt references.
 
 ## Enforcement
 
-- [ ] Blocked and unavailable factors cannot create challenges.
-- [ ] Selected eligible factors can create challenges.
-- [ ] Expired and consumed challenges fail.
-- [ ] Challenge outcome is appended to the trace.
+- [x] Blocked and unavailable factors cannot create challenges.
+- [x] Selected eligible factors can create challenges.
+- [x] Expired and consumed challenges fail.
+- [x] Challenge outcome is appended to the trace.
 
 ## Replay and explanation
 
-- [ ] Exact replay produces a semantically identical result.
-- [ ] Forked replay never mutates the original.
-- [ ] Decision diff separates input, derived, rule, and outcome changes.
-- [ ] Counterfactual claims are replay-verified.
-- [ ] Multi-failure factors display multi-condition remediation when required.
+- [x] Exact replay produces a semantically identical result.
+- [x] Forked replay never mutates the original.
+- [x] Decision diff separates input, derived, rule, and outcome changes.
+- [x] Counterfactual claims are replay-verified.
+- [x] Multi-failure factors display multi-condition remediation when required.
 
 ## Product interface
 
-- [ ] Live Decision view works.
-- [ ] Causality Trace view works.
-- [ ] Factor Inspector view works.
-- [ ] Replay and Diff view works.
-- [ ] Signal provenance and synthetic status are visible.
-- [ ] No cosmetic dashboard is required to understand the product.
+- [x] Live Decision view works.
+- [x] Causality Trace view works.
+- [x] Factor Inspector view works.
+- [x] Replay and Diff view works.
+- [x] Signal provenance and synthetic status are visible.
+- [x] No cosmetic dashboard is required to understand the product.
 
 ## Reliability
 
-- [ ] `npm run check` passes.
-- [ ] `npm run smoke` passes on a fresh database.
-- [ ] All critical failure paths are tested.
-- [ ] Reset restores deterministic demo state.
-- [ ] The core demo uses no external provider.
+- [x] `npm run check` passes.
+- [x] `npm run smoke` passes on a fresh database.
+- [x] All critical failure paths are tested.
+- [x] Reset restores deterministic demo state.
+- [x] The core demo uses no external provider.
 
 ## Integrity
 
-- [ ] No fake probabilities or trust percentages appear.
-- [ ] No live integration is implied for a mock provider.
-- [ ] No fraud-detection, compliance, or production-readiness claim appears.
-- [ ] No real customer or payment data is used.
-- [ ] No secrets or private credential material are committed.
+- [x] No fake probabilities or trust percentages appear.
+- [x] No live integration is implied for a mock provider.
+- [x] No fraud-detection, compliance, or production-readiness claim appears.
+- [x] No real customer or payment data is used.
+- [x] No secrets or private credential material are committed.
 
 ---
 
