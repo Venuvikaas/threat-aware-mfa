@@ -1256,12 +1256,12 @@ Must:
 
 Attempt only after every mandatory phase passes.
 
-- [ ] Store public credential data only.
-- [ ] Implement registration options and verification.
-- [ ] Implement authentication options and verification.
-- [ ] Bind challenge state to decision and transaction.
-- [ ] Validate origin, relying-party ID, credential owner, expiry, and consumption.
-- [ ] Keep the simulated adapter as an explicit demo fallback.
+- [x] Store public credential data only.
+- [x] Implement registration options and verification.
+- [x] Implement authentication options and verification.
+- [x] Bind challenge state to decision and transaction.
+- [x] Validate origin, relying-party ID, credential owner, expiry, and consumption.
+- [x] Keep the simulated adapter as an explicit demo fallback.
 
 **Kill immediately if:** WebAuthn requires changing the stable decision contract, demo host, browser profile, or core demo path.
 
