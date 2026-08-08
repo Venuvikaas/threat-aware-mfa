@@ -16,7 +16,6 @@
  */
 import { useState } from "react";
 import type { CapabilityId, DecisionDiff, DecisionResponse } from "@mfa/contracts";
-import { CANDIDATE_POLICY_VERSION } from "@mfa/policy-bundles";
 import { api, ApiError } from "../lib/api";
 
 interface Props {
@@ -38,6 +37,13 @@ function renderDiffValue(value: unknown): string {
   if (value !== null && typeof value === "object") return JSON.stringify(value);
   return String(value);
 }
+
+/**
+ * Demo candidate bundle for policy-version replay (Stretch B). Kept local:
+ * the web client cannot import @mfa/policy-bundles (it runs node:crypto
+ * hashing at module scope, which is server-only).
+ */
+const CANDIDATE_POLICY_VERSION = "1.1.0";
 
 
 export function ReplayDiffPanel({ decision }: Props) {
