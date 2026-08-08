@@ -1,244 +1,456 @@
-# Threat-Aware MFA Decision Service - Execution Framework & Mega Checklist
+# Threat-Aware Authentication Decision Service
 
-#### Solo developer · 12-hour hackathon build · deployable vertical slice · one commit per completed box
+## Execution Framework and Engineering Checklist
 
-This document replaces the frontend-only simulator plan with a **backend-first product prototype**. The system receives transaction and session signals through an API, evaluates risk and likely threat, applies authentication policy, stores an auditable decision, and returns the allowed and blocked authentication factors to a React client.
+**Product form:** Backend-enforced authentication policy engine with a React decision console  
+**Developer model:** One highly competent developer using AI coding assistants  
+**Architecture:** TypeScript modular monolith  
+**Primary differentiator:** Dependency-driven trust evaluation  
+**Execution rule:** One focused commit per completed checkbox
 
-The goal is not to imitate a production bank stack. The goal is to ship the smallest credible system that demonstrates a real integration boundary, stateful decisions, explainable policy enforcement, and one working authentication path without hiding behind static UI fixtures.
+This execution plan supersedes the earlier simulator and basic backend plans. It includes only the features retained by the technical review: multi-hypothesis threat assessment, dependency-driven trust evaluation, declarative factor definitions, capability filtering, provenance, immutable policy versions, structured causality traces, server-side challenge enforcement, replay, decision diff, and verified counterfactual remediation.
 
----
-
-## How to read this
-
-- **[API]** Backend endpoint or transport work
-- **[ENGINE]** Risk, threat, or policy decision logic
-- **[DATA]** Database, repository, seed, or audit work
-- **[WEB]** React frontend work
-- **[AUTH]** Authentication-factor execution
-- **[TEST]** Automated or manual verification
-- **[DEMO]** Judged experience and presentation reliability
-- **[DOCS]** README, decisions, API contract, and demo script
-- **🔴 BLOCKING** Complete before dependent work begins
-- **🟡 STRETCH** Attempt only after the complete critical path passes
-- **✂ KILL** Remove when its stated condition is reached
-- **🔗 CONTRACT** Freeze the interface before parallel implementation
-
-Every checked box should leave the repository runnable and end with the suggested commit.
+The product must remain compact. It is not a bank core, identity provider, fraud model, compliance platform, or distributed system.
 
 ---
 
-# PART 1 - Product boundary
+# 1. Product thesis
 
-## 1. What this project is
+Most adaptive authentication systems answer:
 
-A transaction authentication decision service with four user-visible capabilities:
+> How much authentication is required?
 
-1. Accept a transaction plus realistic session, account, device, and telecom indicators through a REST API.
-2. Produce deterministic risk, threat, and factor-eligibility decisions.
-3. Store the decision and reason trace in an audit log.
-4. Let a React frontend submit transactions, inspect decisions, and complete a selected factor through a safe demo adapter.
+This product additionally answers:
 
-Core system flow:
+> Which trust dependencies were weakened by the observed threats, and which authentication factors remain eligible as a result?
+
+The core reasoning chain is:
 
 ```text
-React Client
-    |
-    | POST /api/v1/decisions
-    v
-Backend API
-    |
-    +--> Input validation and signal normalization
-    |
-    +--> Risk Engine
-    |       -> LOW | MEDIUM | HIGH
-    |
-    +--> Threat Engine
-    |       -> SIM_CHANNEL_COMPROMISE
-    |       -> PHISHING
-    |       -> INSUFFICIENT_EVIDENCE
-    |
-    +--> Policy Engine
-    |       -> allowedFactors
-    |       -> blockedFactors
-    |       -> final action
-    |
-    +--> SQLite
-            -> users
-            -> devices
-            -> sessions
-            -> transactions
-            -> decisions
-            -> audit events
+Evidence with provenance
+        |
+        v
+Independent threat assessments
+        |
+        v
+Trust-domain impacts
+        |
+        v
+Factor dependency evaluation
+        |
+        v
+Capability and assurance gates
+        |
+        v
+Friction-aware deterministic selection
+        |
+        v
+Server-enforced challenge
+        |
+        v
+Persisted causality trace
+        |
+        +----> Replay, diff, and verified remediation
 ```
 
-Optional factor execution, isolated from the decision path:
+The engine must not contain rules such as:
 
 ```text
-Selected PASSKEY
-    |
-    +--> Preferred stretch: real WebAuthn ceremony
-    |
-    +--> Required fallback: explicit simulated verification adapter
+if threat is SIM swap, block SMS
 ```
 
-## 2. What makes this a product rather than a research demo
+The engine should derive that result:
 
-- The frontend consumes a real backend contract.
-- The backend owns decisions and state.
-- Signals enter through an API rather than being hardcoded into rendered components.
-- Decisions are persisted and can be retrieved later.
-- Policy outputs are machine-readable and suitable for integration.
-- Authentication factors are represented as executable adapters, even if only one demo adapter is implemented.
-- Audit records show exactly why a factor was allowed or blocked.
-
-## 3. What this project still does not claim
-
-- It does not detect real fraud from production data.
-- It does not connect to a bank, UPI network, Account Aggregator, telecom operator, or credit bureau.
-- It does not claim calibrated risk probabilities.
-- It does not claim compliance or production readiness.
-- It does not use real money.
-- It does not implement customer recovery.
-- It does not prove that a passkey defeats every device-compromise scenario.
-- Mock signal providers simulate upstream contracts and must be visibly labeled.
-
-## 4. Judge-facing thesis
-
-> Most risk systems decide how much authentication is required. This service also decides which authentication factors should not be trusted for the suspected attack path.
+```text
+SIM-channel-compromise evidence
+  -> SIM ownership becomes DISTRUSTED
+  -> SMS OTP requires SIM ownership >= TRUSTED
+  -> SMS OTP becomes INELIGIBLE
+```
 
 ---
 
-# PART 2 - Ruthless architecture
+# 2. Scope discipline
 
-## 1. Selected stack
+## 2.1 Must build
 
-### Frontend
+1. Evidence ingestion with source, observation time, synthetic status, and quality state.
+2. Independent assessments for the supported threats.
+3. Ordinal trust assessment across explicit trust domains.
+4. Declarative factor catalog with trust, capability, assurance, friction, and adapter requirements.
+5. Generic factor-eligibility evaluation with no factor-specific branches.
+6. Capability filtering separate from threat incompatibility.
+7. Assurance as an eligibility threshold.
+8. Friction tier as a selector among otherwise eligible factors.
+9. Immutable policy bundles referenced by every decision.
+10. Structured rule and causality traces.
+11. REST API for decision creation and retrieval.
+12. SQLite persistence for evidence, decisions, trace events, challenges, and replay links.
+13. Server-side challenge enforcement.
+14. One safe simulated passkey adapter.
+15. Decision replay with exact and forked modes.
+16. Structured decision diff.
+17. Verified remediation generated by replay.
+18. A focused React console with four views:
+    - live decision,
+    - causality trace,
+    - factor inspector,
+    - replay and diff.
+19. Two core equal-risk scenarios and one capability-constrained scenario.
+20. Automated quality and smoke gates.
+
+## 2.2 Stretch only
+
+1. Real WebAuthn registration and authentication.
+2. Candidate-policy replay across two policy versions.
+3. Time-sensitive evidence staleness visualization.
+4. Generated compatibility matrix derived from engine output.
+5. Exportable decision evidence package.
+
+## 2.3 Explicitly excluded
+
+- Kafka
+- Redis
+- microservices
+- event buses
+- Kubernetes
+- distributed tracing systems
+- live carrier, bank, UPI, Account Aggregator, or device-intelligence APIs
+- real SMS delivery
+- LLM decision logic
+- calibrated probabilities without validated data
+- percentage trust scores
+- named inclusion personas
+- generic analytics dashboards
+- regulation sliders
+- manually maintained threat-factor compatibility tables
+- a separate Why Not engine
+- a separate counterfactual text generator
+- a policy-authoring workflow
+- role-based enterprise administration
+- claims of production readiness, compliance, or real fraud detection
+
+---
+
+# 3. Technology decisions
+
+## 3.1 Repository
+
+Use an npm or pnpm workspace:
+
+```text
+threat-aware-auth/
+  apps/
+    api/
+    web/
+  packages/
+    contracts/
+    decision-core/
+    policy-bundles/
+    demo-data/
+  docs/
+    PRD.md
+    EXECUTION.md
+    DECISIONS.md
+    API.md
+    THREAT_MODEL.md
+    demo-script.md
+  scripts/
+    smoke.ts
+  README.md
+  package.json
+  tsconfig.base.json
+```
+
+## 3.2 Backend
+
+- Node.js
+- Express
+- TypeScript
+- Zod
+- SQLite
+- `better-sqlite3`
+- Vitest
+- Supertest
+
+## 3.3 Frontend
 
 - React
 - Vite
 - TypeScript
-- Native CSS or an already-installed lightweight utility layer
+- Native CSS or an existing lightweight styling layer
 
-### Backend
+## 3.4 Authentication execution
 
-- Node.js
-- Fastify or Express with TypeScript
-- Zod for request and response validation
+- Required: simulated passkey adapter, visibly labeled
+- Stretch: SimpleWebAuthn
 
-Use Fastify if the developer is already comfortable with it. Otherwise use Express. Do not spend build time comparing frameworks.
+## 3.5 Architectural rules
 
-### Data
-
-- SQLite
-- Prisma only if the developer already knows its migration flow
-- Otherwise use `better-sqlite3` with explicit SQL migrations
-
-### Testing
-
-- Vitest for engine and API tests
-- Supertest when using Express, or Fastify injection when using Fastify
-
-### Authentication
-
-- Required: deterministic simulated factor adapter
-- Stretch: SimpleWebAuthn browser and server packages
-
-## 2. Rejected infrastructure
-
-Do not add:
-
-- NestJS unless the repository already uses it
-- Redis
-- queues
-- microservices
-- Kafka
-- Docker Compose
-- Kubernetes
-- event buses
-- separate risk, threat, and policy deployments
-- cloud databases
-- OAuth providers
-- LLM APIs
-- vector databases
-- native device fingerprinting SDKs
-- live telecom, UPI, Account Aggregator, or IP-reputation integrations
-
-The backend is a modular monolith. Risk, threat, policy, factor adapters, and persistence are separate modules in one process.
-
-## 3. Why no Redis
-
-The demo has one process, one database, no distributed lock requirement, no background job, and no cross-instance session problem. SQLite-backed challenge and session state is sufficient.
-
-## 4. Why mock signal providers are acceptable
-
-The service must demonstrate the **contract** by which real providers would deliver signals. Provider adapters return deterministic data with explicit provenance:
-
-```json
-{
-  "name": "sim_change_status",
-  "value": true,
-  "source": "mock_telco_adapter",
-  "observedAt": "2026-08-07T12:00:00.000Z",
-  "synthetic": true
-}
-```
-
-The backend must not pretend it discovered these signals independently.
-
-## 5. System modules
-
-```text
-apps/
-  web/
-  api/
-packages/
-  contracts/
-  decision-core/
-  demo-data/
-docs/
-```
-
-Backend modules:
-
-```text
-api/src/
-  routes/
-  services/
-    decisionService.ts
-  engines/
-    riskEngine.ts
-    threatEngine.ts
-    policyEngine.ts
-  providers/
-    signalProvider.ts
-    mockSignalProvider.ts
-  factors/
-    factorAdapter.ts
-    simulatedPasskeyAdapter.ts
-    webauthnAdapter.ts        # stretch only
-  repositories/
-    userRepository.ts
-    transactionRepository.ts
-    decisionRepository.ts
-    auditRepository.ts
-  db/
-    migrations/
-    connection.ts
-  app.ts
-  server.ts
-```
+- The API is a modular monolith.
+- Engines are pure functions.
+- Routes do not contain policy logic.
+- Repositories do not contain policy logic.
+- The frontend does not compute decisions.
+- Policy bundles are immutable data.
+- All explanations come from structured engine output.
+- A challenge endpoint must enforce the persisted factor decision.
 
 ---
 
-# PART 3 - Frozen contracts 🔗
+# 4. Conceptual model
 
-## 1. Decision request
+## 4.1 Evidence
+
+Evidence is a normalized observation with provenance.
+
+```ts
+type EvidenceQuality = "CONFIRMED" | "REPORTED" | "UNKNOWN";
+
+type EvidenceStatus = "ACTIVE" | "STALE" | "UNAVAILABLE";
+
+interface EvidenceItem {
+  id: string;
+  type: EvidenceType;
+  value: boolean | number | string | null;
+  providerId: string;
+  providerType: string;
+  observedAt: string;
+  validUntil: string | null;
+  synthetic: boolean;
+  quality: EvidenceQuality;
+  status: EvidenceStatus;
+}
+```
+
+Required demo evidence types:
+
+```text
+RECENT_SIM_CHANGE
+FIRST_SEEN_DEVICE
+NEW_PAYEE
+HIGH_VALUE_TRANSACTION
+PHISHING_RELAY_INDICATOR
+FAILED_LOGIN_BURST
+GEO_DISTANCE_ANOMALY
+PASSKEY_ENROLLED
+WEBAUTHN_SUPPORTED
+NETWORK_AVAILABLE
+```
+
+## 4.2 Threat assessments
+
+Threats are assessed independently. They do not form a normalized distribution.
+
+```ts
+type ThreatSupport =
+  | "STRONG"
+  | "MODERATE"
+  | "WEAK"
+  | "UNSUPPORTED";
+
+interface ThreatAssessment {
+  threatId: ThreatId;
+  support: ThreatSupport;
+  supportingEvidenceIds: string[];
+  conflictingEvidenceIds: string[];
+  activatedRuleIds: string[];
+}
+```
+
+Supported threats:
+
+```text
+SIM_CHANNEL_COMPROMISE
+PHISHING_RELAY
+DEVICE_INTEGRITY_CONCERN
+```
+
+`DEVICE_INTEGRITY_CONCERN` must remain narrowly defined. Do not claim that all passkeys fail or survive all device-compromise conditions.
+
+## 4.3 Trust domains
+
+```ts
+type TrustState =
+  | "TRUSTED"
+  | "DEGRADED"
+  | "DISTRUSTED"
+  | "UNKNOWN";
+
+interface TrustAssessment {
+  domainId: TrustDomainId;
+  state: TrustState;
+  evidenceIds: string[];
+  threatIds: string[];
+  activatedRuleIds: string[];
+}
+```
+
+Initial trust domains:
+
+```text
+SIM_OWNERSHIP
+TELECOM_DELIVERY
+DEVICE_INTEGRITY
+CREDENTIAL_INTEGRITY
+ORIGIN_BINDING
+SESSION_INTEGRITY
+USER_VERIFICATION
+KNOWLEDGE_SECRECY
+NETWORK_AVAILABILITY
+```
+
+Do not use numeric trust percentages.
+
+## 4.4 Factor catalog
+
+```ts
+type AssuranceLevel = "AAL1" | "AAL2" | "AAL3";
+type FrictionTier = "LOW" | "MEDIUM" | "HIGH";
+
+type TrustRequirement = {
+  domainId: TrustDomainId;
+  minimumState: "TRUSTED" | "DEGRADED";
+  rationaleCode: string;
+};
+
+interface FactorDefinition {
+  id: FactorId;
+  displayName: string;
+  assurance: AssuranceLevel;
+  trustRequirements: TrustRequirement[];
+  capabilityRequirements: CapabilityId[];
+  frictionTier: FrictionTier;
+  adapterId: string;
+  enabled: boolean;
+}
+```
+
+Initial factors:
+
+- SMS OTP
+- Passkey
+- TOTP
+- PIN
+
+Only passkey requires an execution adapter for the first complete build. Other factor entries exist to prove generic evaluation.
+
+## 4.5 Factor evaluation
+
+```ts
+type FactorStatus =
+  | "ELIGIBLE"
+  | "INELIGIBLE"
+  | "UNAVAILABLE";
+
+interface FailedRequirement {
+  kind: "TRUST" | "CAPABILITY" | "ASSURANCE";
+  requirementId: string;
+  actualState: string;
+  requiredState: string;
+  evidenceIds: string[];
+  ruleIds: string[];
+  reasonCode: string;
+}
+
+interface FactorEvaluation {
+  factorId: FactorId;
+  status: FactorStatus;
+  failedRequirements: FailedRequirement[];
+  assuranceSatisfied: boolean;
+  frictionTier: FrictionTier;
+  traceEventIds: string[];
+}
+```
+
+State precedence:
+
+1. `INELIGIBLE` if any required trust condition fails.
+2. `UNAVAILABLE` if trust is acceptable but a capability is missing.
+3. `INELIGIBLE` if assurance is insufficient.
+4. `ELIGIBLE` otherwise.
+
+## 4.6 Selection
+
+Selection order:
+
+```text
+trust-compatible
+  -> capability-compatible
+  -> assurance-qualified
+  -> lowest friction tier
+  -> configured deterministic tie-breaker
+```
+
+No highest-assurance-first behavior after the minimum assurance is met.
+
+## 4.7 Policy bundles
+
+```ts
+interface PolicyBundle {
+  id: string;
+  version: string;
+  contentHash: string;
+  status: "DRAFT" | "ACTIVE" | "RETIRED";
+  threatRules: ThreatRule[];
+  trustImpactRules: TrustImpactRule[];
+  factorDefinitions: FactorDefinition[];
+  selectionPolicy: SelectionPolicy;
+  createdAt: string;
+}
+```
+
+Rules:
+
+- Active bundles are immutable.
+- Editing creates a new version.
+- Every decision stores bundle ID, version, and content hash.
+- Every trace event stores evaluated rule IDs.
+- No approval workflow is required.
+
+## 4.8 Trace events
+
+```ts
+type TracePhase =
+  | "EVIDENCE_NORMALIZATION"
+  | "THREAT_ASSESSMENT"
+  | "TRUST_ASSESSMENT"
+  | "FACTOR_ELIGIBILITY"
+  | "SELECTION"
+  | "CHALLENGE"
+  | "OUTCOME";
+
+interface RuleTraceEvent {
+  id: string;
+  phase: TracePhase;
+  ruleId: string;
+  ruleVersion: string;
+  inputRefs: string[];
+  outputRefs: string[];
+  explanationCode: string;
+  sequence: number;
+}
+```
+
+The causality UI, factor inspector, audit view, diff, and remediation engine must consume this structure.
+
+---
+
+# 5. API contracts
+
+## 5.1 Decision creation
+
+```text
+POST /api/v1/decisions
+```
+
+Request:
 
 ```ts
 interface CreateDecisionRequest {
   userId: string;
+  clientTransactionId: string;
   transaction: {
-    clientTransactionId: string;
     amountMinor: number;
     currency: "INR";
     payeeId: string;
@@ -246,1029 +458,980 @@ interface CreateDecisionRequest {
   };
   session: {
     sessionId: string;
+    deviceId: string;
     ageSeconds: number;
     failedLoginCount: number;
     ipAddress: string;
     asn: string;
     country: string;
   };
-  device: {
-    deviceId: string;
-    trusted: boolean;
-    firstSeen: boolean;
-    browserFingerprint: string;
-  };
-  signals: {
-    recentSimChange: boolean | null;
-    geoDistanceFromLastLoginKm: number | null;
-    phishingRelayIndicator: boolean;
-  };
+  evidenceOverrides?: EvidenceOverride[];
+  policyVersion?: string;
 }
 ```
 
-## 2. Decision response
+Response:
 
 ```ts
-type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
-
-type ThreatType =
-  | "SIM_CHANNEL_COMPROMISE"
-  | "PHISHING"
-  | "INSUFFICIENT_EVIDENCE";
-
-type FactorId = "PASSKEY" | "SMS_OTP";
-
-type DecisionAction =
-  | "ALLOW_WITH_FACTOR"
-  | "REFER_TO_ASSISTED_RECOVERY";
-
-interface FactorDecision {
-  factor: FactorId;
-  status: "ALLOWED" | "BLOCKED" | "UNAVAILABLE";
-  reasonCode: string;
-  reason: string;
-}
-
-interface CreateDecisionResponse {
+interface DecisionResponse {
   decisionId: string;
   transactionId: string;
-  policyVersion: string;
+  policy: {
+    bundleId: string;
+    version: string;
+    contentHash: string;
+  };
   risk: {
-    level: RiskLevel;
-    reasons: string[];
+    level: "LOW" | "MEDIUM" | "HIGH";
+    reasonCodes: string[];
   };
-  threat: {
-    type: ThreatType;
-    support: "HIGH" | "MODERATE" | "INSUFFICIENT";
-    evidence: string[];
-  };
-  factors: FactorDecision[];
-  allowedFactors: FactorId[];
-  blockedFactors: FactorId[];
-  selectedFactor: FactorId | null;
-  action: DecisionAction;
+  evidence: EvidenceItem[];
+  threats: ThreatAssessment[];
+  trust: TrustAssessment[];
+  factors: FactorEvaluation[];
+  selectedFactorId: FactorId | null;
+  action: "CHALLENGE" | "ASSISTED_RECOVERY";
+  trace: RuleTraceEvent[];
   createdAt: string;
 }
 ```
 
-## 3. Factor challenge contract
+## 5.2 Retrieval
+
+```text
+GET /api/v1/decisions/:decisionId
+GET /api/v1/decisions/:decisionId/trace
+```
+
+## 5.3 Challenge
+
+```text
+POST /api/v1/challenges
+POST /api/v1/challenges/:challengeId/verify
+```
+
+The create endpoint must reject a factor unless the persisted decision marks the factor eligible and policy permits it to execute.
+
+## 5.4 Replay
+
+```text
+POST /api/v1/decisions/:decisionId/replays
+GET  /api/v1/replays/:replayId
+GET  /api/v1/replays/:replayId/diff
+```
+
+Replay request:
 
 ```ts
-interface CreateChallengeRequest {
-  decisionId: string;
-  factor: FactorId;
-}
-
-interface CreateChallengeResponse {
-  challengeId: string;
-  factor: FactorId;
-  mode: "SIMULATED" | "WEBAUTHN";
-  expiresAt: string;
-  publicOptions?: unknown;
-}
-
-interface VerifyChallengeRequest {
-  challengeId: string;
-  response: unknown;
-}
-
-interface VerifyChallengeResponse {
-  challengeId: string;
-  verified: boolean;
-  transactionStatus: "AUTHORIZED" | "DENIED" | "PENDING_RECOVERY";
+interface CreateReplayRequest {
+  mode: "EXACT" | "FORK";
+  evidenceChanges?: EvidenceOverride[];
+  capabilityChanges?: CapabilityOverride[];
+  policyVersion?: string;
 }
 ```
 
-## 4. Audit event contract
+## 5.5 Remediation
 
-```ts
-interface AuditEvent {
-  id: string;
-  decisionId: string;
-  eventType:
-    | "DECISION_CREATED"
-    | "FACTOR_BLOCKED"
-    | "FACTOR_SELECTED"
-    | "CHALLENGE_CREATED"
-    | "CHALLENGE_VERIFIED"
-    | "RECOVERY_REQUIRED";
-  reasonCode: string;
-  details: Record<string, unknown>;
-  createdAt: string;
-}
+```text
+POST /api/v1/decisions/:decisionId/remediations/:factorId/verify
 ```
 
-## 5. Contract rules
+The endpoint evaluates candidate remediation sets through replay and returns only verified changes.
 
-- API input and output are runtime-validated.
-- Money is stored as integer minor units.
-- IDs are server-generated except client transaction ID, session ID, and device ID.
-- Server time owns `createdAt`, expiry, and audit timestamps.
-- The frontend never calculates risk, threat, or factor eligibility.
-- The frontend never decides whether a factor is allowed.
-- An unavailable or blocked factor cannot create a challenge.
-- Repeated use of the same client transaction ID must not silently create conflicting decisions.
-- Every decision stores policy version and normalized evidence.
-- Synthetic provider data is tagged as synthetic in storage and in the UI.
+## 5.6 Demo support
+
+```text
+GET  /health
+GET  /api/v1/demo/scenarios
+POST /api/v1/demo/reset
+```
+
+Demo reset must be disabled unless `DEMO_MODE=true`.
 
 ---
 
-# PART 4 - Data model
+# 6. Persistence model
 
-## 1. Minimum tables
-
-### users
+Minimum SQLite tables:
 
 ```text
-id
-name
-account_created_at
-passkey_enrolled
-created_at
+users
+devices
+sessions
+transactions
+evidence_items
+policy_bundles
+policy_rules
+decisions
+threat_assessments
+trust_assessments
+factor_evaluations
+failed_requirements
+trace_events
+challenges
+replays
+replay_changes
+decision_diffs
+verified_remediations
 ```
 
-### devices
+Persistence rules:
 
-```text
-id
-user_id
-trusted
-browser_fingerprint
-first_seen_at
-last_seen_at
-```
-
-### sessions
-
-```text
-id
-user_id
-device_id
-ip_address
-asn
-country
-started_at
-failed_login_count
-```
-
-### transactions
-
-```text
-id
-client_transaction_id
-user_id
-amount_minor
-currency
-payee_id
-payee_is_known
-status
-created_at
-```
-
-### signals
-
-```text
-id
-transaction_id
-name
-value_json
-source
-synthetic
-observed_at
-```
-
-### decisions
-
-```text
-id
-transaction_id
-risk_level
-risk_reasons_json
-threat_type
-threat_support
-threat_evidence_json
-allowed_factors_json
-blocked_factors_json
-selected_factor
-action
-policy_version
-created_at
-```
-
-### factor_evaluations
-
-```text
-id
-decision_id
-factor
-status
-reason_code
-reason
-```
-
-### challenges
-
-```text
-id
-decision_id
-factor
-mode
-challenge_data_json
-expires_at
-consumed_at
-verified
-created_at
-```
-
-### audit_events
-
-```text
-id
-decision_id
-event_type
-reason_code
-details_json
-created_at
-```
-
-## 2. Database rules
-
-- SQLite foreign keys enabled.
-- Transaction and decision creation occur in one database transaction.
-- Challenge verification marks the challenge consumed in the same transaction that updates transaction status.
-- A consumed or expired challenge cannot verify again.
-- The audit log is append-only through application code.
-- Store synthetic demo users only.
-- Do not store OTPs, passkey private keys, raw biometric data, or secrets.
+- Foreign keys enabled.
+- Decision creation is atomic.
+- Challenge verification is atomic.
+- Trace events are append-only.
+- Replays never mutate original decisions.
+- Replay records link to the source decision.
+- Policy bundle content hashes are verified when loaded.
+- Exact replay compares semantic outputs, excluding generated IDs and timestamps.
+- Evidence preserves provider, synthetic status, and observation time.
+- Never store OTP values, private passkey keys, biometric data, or real customer data.
 
 ---
 
-# PART 5 - Decision logic
-
-## 1. Risk engine
-
-The risk engine creates a categorical output from explicit demonstration rules. It does not generate a fake probability.
-
-Suggested high-risk triggers:
-
-- amount at or above configured high-value threshold,
-- recent SIM change,
-- first-seen device,
-- large geo distance,
-- repeated failed logins,
-- phishing-relay indicator,
-- new payee combined with another major indicator.
-
-The output contains the risk level and exact rule reasons.
-
-## 2. Threat engine
-
-Support only narrow, defensible hypotheses:
-
-### SIM_CHANNEL_COMPROMISE
-
-Required primary evidence:
-
-- `recentSimChange === true`
-
-Supporting context may increase `support` from moderate to high:
-
-- first-seen device,
-- new payee,
-- high-value transfer.
-
-### PHISHING
-
-Required primary evidence:
-
-- `phishingRelayIndicator === true`
-
-Supporting context:
-
-- unusual or first-seen session,
-- new payee,
-- recent failed logins.
-
-### INSUFFICIENT_EVIDENCE
-
-Use when:
-
-- neither primary indicator exists,
-- primary signals conflict,
-- required signal is unavailable and no safe hypothesis can be selected.
-
-No normalized probability vector is allowed.
-
-## 3. Policy engine
-
-Policy evaluation order:
-
-1. Load user factor enrollment.
-2. Load required assurance from transaction policy.
-3. Block threat-incompatible factors.
-4. Mark unenrolled factors unavailable.
-5. Retain factors meeting the assurance requirement.
-6. Select the first allowed factor in fixed preference order.
-7. If none survives, return assisted recovery.
-
-Required demonstration policies:
-
-- SIM channel compromise blocks SMS OTP.
-- Phishing blocks SMS OTP as relayable under this narrow policy.
-- Passkey is allowed for these two supported hypotheses only when enrolled.
-- Insufficient evidence never silently produces a confident factor recommendation. Use a conservative factor policy or assisted recovery, documented in `DECISIONS.md`.
-
-## 4. Fair baseline
-
-A separate baseline function receives only:
-
-- risk level,
-- required assurance,
-- factor enrollment.
-
-It returns the same high-level requirement for equal-risk transactions. It does not receive threat indicators and is not configured to fail deliberately.
-
-The UI uses the baseline only to show information loss, not to claim that all existing systems are naive.
-
----
-
-# PART 6 - REST API
-
-## Required endpoints
+# 7. Repository layout
 
 ```text
-GET    /health
-POST   /api/v1/decisions
-GET    /api/v1/decisions/:decisionId
-GET    /api/v1/decisions/:decisionId/audit
-POST   /api/v1/challenges
-POST   /api/v1/challenges/:challengeId/verify
-GET    /api/v1/demo/users
-POST   /api/v1/demo/reset
+apps/
+  api/
+    src/
+      routes/
+        decisions.ts
+        challenges.ts
+        replays.ts
+        remediations.ts
+        demo.ts
+      services/
+        decisionService.ts
+        challengeService.ts
+        replayService.ts
+        remediationService.ts
+      providers/
+        evidenceProvider.ts
+        mockTelecomProvider.ts
+        mockDeviceProvider.ts
+        mockSessionProvider.ts
+      repositories/
+        decisionRepository.ts
+        evidenceRepository.ts
+        policyRepository.ts
+        challengeRepository.ts
+        replayRepository.ts
+      db/
+        migrations/
+        seed/
+        connection.ts
+      middleware/
+      app.ts
+      server.ts
+  web/
+    src/
+      api/
+      components/
+      views/
+        LiveDecisionView.tsx
+        CausalityTraceView.tsx
+        FactorInspectorView.tsx
+        ReplayDiffView.tsx
+      styles/
+      App.tsx
+packages/
+  contracts/
+    src/
+      evidence.ts
+      threats.ts
+      trust.ts
+      factors.ts
+      decisions.ts
+      replay.ts
+  decision-core/
+    src/
+      normalizeEvidence.ts
+      assessThreats.ts
+      assessTrust.ts
+      evaluateFactors.ts
+      selectFactor.ts
+      buildTrace.ts
+      diffDecisions.ts
+      verifyRemediation.ts
+  policy-bundles/
+    src/
+      v1.ts
+      validatePolicy.ts
+      hashPolicy.ts
+  demo-data/
+    src/
+      simSwap.ts
+      phishing.ts
+      constrainedCapability.ts
 ```
 
-## Endpoint behavior
+Boundary rules:
 
-### GET /health
-
-Returns process and database health. No deep external checks because there are no external providers.
-
-### POST /api/v1/decisions
-
-- Validate request.
-- Load or create synthetic demo entities.
-- Normalize and persist signals.
-- Evaluate risk.
-- Evaluate threat.
-- Evaluate factors.
-- Persist transaction, decision, factor evaluations, and audit events atomically.
-- Return the complete decision response.
-
-### GET /api/v1/decisions/:decisionId
-
-Returns the persisted decision and factor evaluations.
-
-### GET /api/v1/decisions/:decisionId/audit
-
-Returns ordered audit events for the decision.
-
-### POST /api/v1/challenges
-
-- Verify the decision exists.
-- Verify the requested factor is selected or allowed.
-- Reject blocked or unavailable factors.
-- Create an expiring one-time challenge.
-
-### POST /api/v1/challenges/:challengeId/verify
-
-- Reject missing, expired, consumed, or decision-mismatched challenges.
-- Invoke the registered factor adapter.
-- Mark challenge consumed.
-- Update transaction state.
-- Append audit event.
-
-### POST /api/v1/demo/reset
-
-Resets only synthetic demo data. It must be disabled outside demo mode.
+- `decision-core` has no Express, React, database, file-system, time, random, or network imports.
+- `contracts` contains Zod schemas and inferred TypeScript types.
+- `policy-bundles` contains declarative data and validation only.
+- The API service owns orchestration and persistence.
+- React renders API responses and never imports `decision-core`.
 
 ---
 
-# PART 7 - Mega checklist
+# 8. Engineering workflow
 
-## ☐ PHASE 0 - Repository and contracts 🔴 BLOCKING
+## Contract-first
 
-- [ ] **[DOCS]** Add the revised product boundary to `docs/DECISIONS.md`.  
-  Commit: `docs: pivot to backend decision service`
+Freeze shared schemas before route or UI work.
 
-- [ ] **[DOCS]** Record what remains simulated and why.  
-  Commit: `docs: define synthetic signal boundary`
+## Vertical slices
 
-- [ ] **[API]** Create workspace structure for `apps/web`, `apps/api`, and shared packages.  
+Build in this order:
+
+1. SIM-swap decision through the API.
+2. Persisted causality trace.
+3. React rendering of that decision.
+4. Backend rejection of SMS challenge.
+5. Simulated passkey execution.
+6. Phishing scenario.
+7. Exact replay.
+8. One-signal fork and diff.
+9. Verified passkey-enrollment remediation.
+10. Generalize catalog with TOTP and PIN.
+
+## Commit discipline
+
+Scopes:
+
+```text
+contracts
+core
+policy
+api
+data
+auth
+replay
+web
+test
+docs
+chore
+```
+
+## Quality gate
+
+```bash
+npm run check
+```
+
+Must run:
+
+1. formatting check,
+2. lint,
+3. TypeScript validation,
+4. unit tests,
+5. API integration tests,
+6. frontend build,
+7. backend build.
+
+## Smoke gate
+
+```bash
+npm run smoke
+```
+
+Must:
+
+1. reset demo data,
+2. create SIM-swap decision,
+3. verify SMS is rejected,
+4. execute simulated passkey,
+5. create phishing decision,
+6. exact-replay the first decision,
+7. fork replay with passkey unavailable,
+8. verify assisted recovery,
+9. retrieve decision diff,
+10. print `PASS` only when all assertions succeed.
+
+---
+
+# 9. Mega checklist
+
+## PHASE 0: Scope, threat model, and contracts 🔴
+
+- [x] **[DOCS]** Update `docs/DECISIONS.md` with the Dependency Trust Engine as the architectural center.  
+  Commit: `docs: adopt dependency driven trust model`
+
+- [x] **[DOCS]** Write `docs/THREAT_MODEL.md` with narrow attacker capabilities for SIM-channel compromise, phishing relay, and device-integrity concern.  
+  Commit: `docs: define supported threat model`
+
+- [x] **[DOCS]** Record excluded claims and unsupported threats.  
+  Commit: `docs: record security claim boundaries`
+
+- [x] **[CHORE]** Scaffold the workspace and repository layout.  
   Commit: `chore: scaffold full stack workspace`
 
-- [ ] **[API]** Add root scripts for dev, test, type-check, build, and full check.  
-  Commit: `chore: add workspace scripts`
+- [x] **[CONTRACTS]** Freeze Evidence, ThreatAssessment, TrustAssessment, FactorDefinition, FactorEvaluation, PolicyBundle, DecisionResponse, TraceEvent, Replay, Diff, and Remediation schemas.  
+  Commit: `feat(contracts): freeze decision intelligence contracts`
 
-- [ ] **[API]** 🔗 Freeze request, response, challenge, and audit contracts in `packages/contracts`.  
-  Commit: `feat(contracts): freeze api contracts`
+- [x] **[TEST]** Validate accepted and rejected examples for every schema.  
+  Commit: `test(contracts): cover runtime validation`
 
-- [ ] **[TEST]** Add contract validation tests for valid and invalid payloads.  
-  Commit: `test(contracts): validate api payloads`
-
-- [ ] **[DOCS]** Create `docs/API.md` with endpoint examples and error shapes.  
-  Commit: `docs: add api contract reference`
+- [x] **[DOCS]** Create `docs/API.md` with exact payload examples and common errors.  
+  Commit: `docs: add api reference`
 
 ### Exit gate
 
-- [ ] Web and API packages start independently.
-- [ ] Shared contracts compile in both packages.
-- [ ] No decision logic exists in the frontend.
-- [ ] No unapproved infrastructure dependency is installed.
+- [x] Contracts compile in API and web applications.
+- [x] The threat model defines attacker control and factor implications narrowly.
+- [x] No percentage probability or trust score exists.
+- [x] No factor-specific policy branch has been introduced.
 
 ---
 
-## ☐ PHASE 1 - Database and backend spine 🔴 BLOCKING
+## PHASE 1: Pure decision core 🔴
 
-- [ ] **[DATA]** Configure SQLite connection and enable foreign keys.  
-  Commit: `feat(data): initialize sqlite database`
+### Evidence normalization
 
-- [ ] **[DATA]** Create schema migrations for all minimum tables.  
-  Commit: `feat(data): add core database schema`
+- [x] **[CORE]** Implement evidence normalization and status validation.  
+  Commit: `feat(core): normalize evidence with provenance`
 
-- [ ] **[DATA]** Add seed migration for one synthetic user, one trusted device, one new device, and passkey enrollment state.  
-  Commit: `feat(data): seed demo identities`
+- [x] **[CORE]** Implement validity-window and staleness evaluation.  
+  Commit: `feat(core): evaluate evidence freshness`
 
-- [ ] **[DATA]** Implement repositories for users, transactions, decisions, factor evaluations, challenges, and audit events.  
-  Commit: `feat(data): add persistence repositories`
+- [x] **[TEST]** Cover active, stale, unavailable, conflicting, and malformed evidence.  
+  Commit: `test(core): cover evidence normalization`
 
-- [ ] **[API]** Add structured JSON error response middleware.  
-  Commit: `feat(api): add consistent error handling`
+### Multi-hypothesis assessment
 
-- [ ] **[API]** Implement `GET /health` with database access check.  
-  Commit: `feat(api): add health endpoint`
+- [x] **[POLICY]** Define versioned threat rules with primary, supporting, and conflicting evidence predicates.  
+  Commit: `feat(policy): define threat assessment rules`
 
-- [ ] **[TEST]** Test migration, seed, repository round trip, foreign keys, and health endpoint.  
-  Commit: `test(data): verify database spine`
+- [x] **[CORE]** Implement independent threat assessment.  
+  Commit: `feat(core): assess multiple threat hypotheses`
+
+- [x] **[TEST]** Prove hypotheses can coexist without normalization.  
+  Commit: `test(core): verify independent threat support`
+
+- [x] **[TEST]** Prove stale primary evidence cannot produce strong support.  
+  Commit: `test(core): constrain stale threat evidence`
+
+### Trust assessment
+
+- [x] **[POLICY]** Define typed trust-impact rules for supported threats.  
+  Commit: `feat(policy): define trust impact rules`
+
+- [x] **[CORE]** Implement trust-state propagation.  
+  Commit: `feat(core): derive trust assessments`
+
+- [x] **[TEST]** Cover trusted, degraded, distrusted, unknown, and conflicting impacts.  
+  Commit: `test(core): cover trust propagation`
+
+### Factor catalog and eligibility
+
+- [x] **[POLICY]** Define declarative SMS OTP, passkey, TOTP, and PIN entries.  
+  Commit: `feat(policy): add declarative factor catalog`
+
+- [x] **[POLICY]** Validate factor definitions and reject unknown dependency or capability references.  
+  Commit: `feat(policy): validate factor definitions`
+
+- [x] **[CORE]** Implement generic dependency evaluation.  
+  Commit: `feat(core): evaluate factor trust requirements`
+
+- [x] **[CORE]** Implement typed capability filtering.  
+  Commit: `feat(core): evaluate factor capabilities`
+
+- [x] **[CORE]** Implement assurance threshold evaluation.  
+  Commit: `feat(core): enforce assurance requirements`
+
+- [x] **[CORE]** Implement friction-tier selection with deterministic tie-break.  
+  Commit: `feat(core): select lowest friction eligible factor`
+
+- [x] **[TEST]** Prove the evaluator contains no factor-specific conditional behavior.  
+  Commit: `test(core): verify generic factor evaluation`
+
+- [x] **[TEST]** Prove unsafe, unavailable, or under-assurance factors cannot be selected.  
+  Commit: `test(core): enforce factor invariants`
+
+### Structured trace
+
+- [x] **[CORE]** Emit trace events for every evaluation phase.  
+  Commit: `feat(core): emit structured causality trace`
+
+- [x] **[TEST]** Verify sequence, references, rule IDs, and explanation codes.  
+  Commit: `test(core): validate trace integrity`
 
 ### Exit gate
 
-- [ ] Fresh database migration succeeds.
-- [ ] Seed is deterministic.
-- [ ] Health endpoint confirms database access.
-- [ ] Repository tests pass.
+- [x] A single pure function accepts evidence, capabilities, transaction context, and policy bundle.
+- [x] It returns threats, trust states, factor evaluations, selection, and trace.
+- [x] Every output is deterministic.
+- [x] All decision-core tests pass.
 
 ---
 
-## ☐ PHASE 2 - Decision engines 🔴 BLOCKING
+## PHASE 2: Policy bundles and persistence 🔴
 
-### Risk engine
+- [x] **[POLICY]** Implement policy-bundle validation.  
+  Commit: `feat(policy): validate immutable policy bundles`
 
-- [ ] **[ENGINE]** Define versioned risk policy with categorical thresholds and reason codes.  
-  Commit: `feat(engine): define risk policy`
+- [x] **[POLICY]** Implement canonical serialization and content hashing.  
+  Commit: `feat(policy): hash policy content`
 
-- [ ] **[ENGINE]** Implement pure risk evaluation.  
-  Commit: `feat(engine): evaluate transaction risk`
+- [x] **[POLICY]** Create active demo policy `v1.0.0`.  
+  Commit: `feat(policy): add active demo policy`
 
-- [ ] **[TEST]** Cover low, medium, high, threshold boundary, and missing-signal cases.  
-  Commit: `test(engine): cover risk evaluation`
+- [x] **[DATA]** Create SQLite migrations for the minimum persistence model.  
+  Commit: `feat(data): add decision intelligence schema`
 
-### Threat engine
+- [x] **[DATA]** Enable foreign keys and transactional helpers.  
+  Commit: `feat(data): enforce sqlite integrity`
 
-- [ ] **[ENGINE]** Define narrow SIM-channel and phishing hypotheses.  
-  Commit: `feat(engine): define threat hypotheses`
+- [x] **[DATA]** Implement repositories for policies, evidence, decisions, assessments, factor evaluations, trace events, challenges, replays, diffs, and remediations.  
+  Commit: `feat(data): add decision repositories`
 
-- [ ] **[ENGINE]** Implement pure threat evaluation with support bands and evidence.  
-  Commit: `feat(engine): evaluate threat evidence`
+- [x] **[DATA]** Seed synthetic user, device, session, capabilities, policy bundle, and three scenarios.  
+  Commit: `feat(data): seed deterministic demo data`
 
-- [ ] **[TEST]** Cover SIM change, phishing relay, insufficient evidence, and conflicting evidence.  
-  Commit: `test(engine): cover threat evaluation`
-
-### Policy engine
-
-- [ ] **[ENGINE]** Define SMS OTP and passkey properties, assurance, enrollment requirements, and preference order.  
-  Commit: `feat(engine): define authentication factors`
-
-- [ ] **[ENGINE]** Implement factor evaluation states: allowed, blocked, unavailable.  
-  Commit: `feat(engine): evaluate factor eligibility`
-
-- [ ] **[ENGINE]** Implement selected factor and assisted-recovery outcome.  
-  Commit: `feat(engine): select authentication outcome`
-
-- [ ] **[TEST]** Prove blocked and unavailable factors can never be selected.  
-  Commit: `test(engine): enforce factor invariants`
-
-- [ ] **[ENGINE]** Implement fair scalar baseline as a separate pure function.  
-  Commit: `feat(engine): add scalar baseline`
-
-- [ ] **[TEST]** Prove baseline input excludes threat evidence.  
-  Commit: `test(engine): constrain baseline contract`
+- [x] **[TEST]** Verify fresh migration, seed idempotency, policy hash, and repository round trips.  
+  Commit: `test(data): verify persistence foundation`
 
 ### Exit gate
 
-- [ ] Engines are deterministic pure functions.
-- [ ] No fake probability is returned.
-- [ ] Every output includes stable reason codes.
-- [ ] Equal-risk hero scenarios produce different threat traces.
-- [ ] All engine tests pass.
+- [x] The active policy is immutable and hash-verified.
+- [x] Decisions can reference exact policy versions.
+- [x] Trace records preserve rule and evidence references.
+- [x] Replays can link to immutable originals.
 
 ---
 
-## ☐ PHASE 3 - Decision API and audit 🔴 BLOCKING
+## PHASE 3: Decision API 🔴
 
-- [ ] **[API]** Implement request normalization and validation.  
-  Commit: `feat(api): normalize decision inputs`
+- [x] **[API]** Create Express application with Zod validation and structured errors.  
+  Commit: `feat(api): bootstrap validated express api`
 
-- [ ] **[API]** Implement `decisionService` orchestration.  
-  Commit: `feat(api): orchestrate authentication decision`
+- [x] **[API]** Add request correlation IDs and safe structured logging.  
+  Commit: `feat(api): add request tracing`
 
-- [ ] **[DATA]** Persist transaction, signals, decision, factor evaluations, and audit events atomically.  
-  Commit: `feat(data): persist complete decision trace`
+- [x] **[API]** Implement mock telecom, device, session, and capability evidence providers.  
+  Commit: `feat(api): add synthetic evidence providers`
 
-- [ ] **[API]** Implement `POST /api/v1/decisions`.  
-  Commit: `feat(api): create decision endpoint`
+- [x] **[API]** Preserve provider ID, provider type, observation time, quality, and synthetic status.  
+  Commit: `feat(api): preserve evidence provenance`
 
-- [ ] **[API]** Implement `GET /api/v1/decisions/:decisionId`.  
-  Commit: `feat(api): retrieve persisted decision`
+- [x] **[API]** Implement decision orchestration service.  
+  Commit: `feat(api): orchestrate dependency driven decision`
 
-- [ ] **[API]** Implement `GET /api/v1/decisions/:decisionId/audit`.  
-  Commit: `feat(api): retrieve audit timeline`
+- [x] **[API]** Implement `POST /api/v1/decisions`.  
+  Commit: `feat(api): create authentication decision`
 
-- [ ] **[API]** Add idempotency handling for repeated client transaction IDs.  
-  Commit: `feat(api): protect duplicate transaction decisions`
+- [x] **[API]** Implement decision and trace retrieval endpoints.  
+  Commit: `feat(api): retrieve decision and trace`
 
-- [ ] **[TEST]** API test: SIM-swap request blocks SMS and allows passkey.  
-  Commit: `test(api): verify sim swap decision`
+- [x] **[API]** Add client-transaction idempotency behavior.  
+  Commit: `feat(api): enforce decision idempotency`
 
-- [ ] **[TEST]** API test: phishing request returns phishing-specific reasons.  
-  Commit: `test(api): verify phishing decision`
+- [x] **[API]** Add health and demo scenario endpoints.  
+  Commit: `feat(api): add health and demo routes`
 
-- [ ] **[TEST]** API test: unenrolled passkey causes assisted recovery.  
-  Commit: `test(api): verify recovery fallback`
+- [x] **[TEST]** Test SIM-swap scenario end to end through HTTP.  
+  Commit: `test(api): verify sim trust propagation`
 
-- [ ] **[TEST]** API test: decision is retrievable and audit order is stable.  
-  Commit: `test(api): verify persisted audit trace`
+- [x] **[TEST]** Test phishing scenario end to end through HTTP.  
+  Commit: `test(api): verify phishing trust propagation`
+
+- [x] **[TEST]** Test capability-constrained assisted-recovery scenario.  
+  Commit: `test(api): verify capability fallback`
+
+- [x] **[TEST]** Test unavailable providers and stale evidence.  
+  Commit: `test(api): verify conservative provider failures`
 
 ### Exit gate
 
-- [ ] A curl request creates a complete decision.
-- [ ] The response matches the frozen contract.
-- [ ] Database contains the transaction and audit trail.
-- [ ] Re-fetch returns the same decision.
-- [ ] Duplicate requests do not create conflicting records.
+- [x] API creates and persists a complete decision atomically.
+- [x] Retrieval returns the same semantic output.
+- [x] Evidence provenance is visible.
+- [x] Equal-risk scenarios produce different trust-impact traces.
 
 ---
 
-## ☐ PHASE 4 - Signal provider boundary 🔴 BLOCKING
+## PHASE 4: Server-side challenge enforcement 🔴
 
-- [ ] **[API]** Define `SignalProvider` interface.  
-  Commit: `feat(api): define signal provider interface`
+- [x] **[AUTH]** Define factor-adapter interface.  
+  Commit: `feat(auth): define execution adapter contract`
 
-- [ ] **[API]** Implement deterministic mock telecom provider for recent SIM change.  
-  Commit: `feat(api): add mock telecom signals`
-
-- [ ] **[API]** Implement deterministic mock device and geo provider.  
-  Commit: `feat(api): add mock device signals`
-
-- [ ] **[API]** Tag every provider result with source, observed time, and `synthetic: true`.  
-  Commit: `feat(api): preserve signal provenance`
-
-- [ ] **[API]** Permit explicit request signals to override mock provider values only in demo mode.  
-  Commit: `feat(api): add controlled demo overrides`
-
-- [ ] **[TEST]** Verify provider timeout or failure produces unknown signal, not fabricated safe data.  
-  Commit: `test(api): handle unavailable signal provider`
-
-- [ ] **[DOCS]** Document where a real carrier, device-risk, IP-reputation, UPI, or Account Aggregator adapter would connect. Do not claim those integrations exist.  
-  Commit: `docs: document production signal seams`
-
-### Exit gate
-
-- [ ] Core decision service uses provider contracts rather than UI fixtures.
-- [ ] Every signal has visible provenance.
-- [ ] Provider failure is explicit.
-- [ ] No live external dependency exists on the demo path.
-
----
-
-## ☐ PHASE 5 - Frontend integration 🔴 BLOCKING
-
-### Transaction submission
-
-- [ ] **[WEB]** Build transaction form with amount, payee type, device profile, session profile, and threat-signal controls.  
-  Commit: `feat(web): add transaction submission form`
-
-- [ ] **[WEB]** Load synthetic user and device presets from the backend.  
-  Commit: `feat(web): load demo identity presets`
-
-- [ ] **[WEB]** Submit to `POST /api/v1/decisions`; do not calculate decisions client-side.  
-  Commit: `feat(web): request backend decision`
-
-- [ ] **[WEB]** Add loading, validation, backend unavailable, and invalid-response states.  
-  Commit: `feat(web): handle decision request states`
-
-### Decision visualization
-
-- [ ] **[WEB]** Display risk level and exact risk reasons.  
-  Commit: `feat(web): display risk result`
-
-- [ ] **[WEB]** Display threat type, support band, and evidence.  
-  Commit: `feat(web): display threat result`
-
-- [ ] **[WEB]** Display factor cards for allowed, blocked, and unavailable factors.  
-  Commit: `feat(web): display factor eligibility`
-
-- [ ] **[WEB]** Display selected factor or assisted recovery outcome.  
-  Commit: `feat(web): display policy outcome`
-
-- [ ] **[WEB]** Display policy version and synthetic-signal disclosure.  
-  Commit: `feat(web): disclose decision provenance`
-
-- [ ] **[WEB]** Retrieve and render the audit timeline from the audit endpoint.  
-  Commit: `feat(web): display persisted audit trail`
-
-### Hero comparison
-
-- [ ] **[WEB]** Add one-click presets for SIM-swap and phishing cases with the same amount and scalar-risk band.  
-  Commit: `feat(web): add hero transaction presets`
-
-- [ ] **[WEB]** Add a comparison mode that shows two backend-created decision IDs side by side.  
-  Commit: `feat(web): compare backend decisions`
-
-- [ ] **[WEB]** Show the fair scalar baseline as a shared result.  
-  Commit: `feat(web): display baseline comparison`
-
-### Exit gate
-
-- [ ] All visible decisions originate from API responses.
-- [ ] Browser refresh can retrieve a persisted decision by ID.
-- [ ] Hero scenarios are created through the backend.
-- [ ] Audit events are loaded from persistence.
-- [ ] The UI never implies mock providers are live integrations.
-
----
-
-## ☐ PHASE 6 - Executable factor adapter 🔴 BLOCKING
-
-### Adapter framework
-
-- [ ] **[AUTH]** Define factor-adapter interface for create challenge and verify.  
-  Commit: `feat(auth): define factor adapter contract`
-
-- [ ] **[AUTH]** Implement simulated passkey adapter with explicit `SIMULATED` mode.  
+- [x] **[AUTH]** Implement explicitly simulated passkey adapter.  
   Commit: `feat(auth): add simulated passkey adapter`
 
-- [ ] **[DATA]** Persist challenges with expiry, consumed state, and decision reference.  
-  Commit: `feat(data): persist factor challenges`
+- [x] **[DATA]** Persist challenges with decision, factor, mode, expiry, consumed state, and result.  
+  Commit: `feat(data): persist challenge lifecycle`
 
-- [ ] **[API]** Implement challenge creation endpoint.  
-  Commit: `feat(api): create factor challenge`
+- [x] **[API]** Implement challenge creation endpoint.  
+  Commit: `feat(api): create selected factor challenge`
 
-- [ ] **[API]** Implement challenge verification endpoint.  
+- [x] **[API]** Reject ineligible, unavailable, disabled, or non-selected factors.  
+  Commit: `fix(auth): enforce persisted factor decision`
+
+- [x] **[API]** Implement challenge verification endpoint.  
   Commit: `feat(api): verify factor challenge`
 
-- [ ] **[API]** Reject challenge creation for blocked or unavailable factors.  
-  Commit: `fix(auth): enforce selected factor policy`
-
-- [ ] **[API]** Reject expired and replayed challenges.  
+- [x] **[AUTH]** Reject expired and replayed challenges.  
   Commit: `fix(auth): prevent challenge replay`
 
-- [ ] **[DATA]** Append challenge creation and verification audit events.  
-  Commit: `feat(data): audit factor execution`
+- [x] **[DATA]** Append challenge and outcome trace events.  
+  Commit: `feat(data): audit authentication outcome`
 
-- [ ] **[WEB]** Add `Continue with passkey` action for the selected factor.  
-  Commit: `feat(web): launch selected factor challenge`
+- [x] **[TEST]** Prove an SMS challenge is rejected in the SIM-compromise scenario.  
+  Commit: `test(auth): reject distrusted sms dependency`
 
-- [ ] **[WEB]** Clearly label simulated factor execution.  
+- [x] **[TEST]** Prove the selected passkey adapter completes once only.  
+  Commit: `test(auth): verify passkey challenge lifecycle`
+
+### Exit gate
+
+- [x] The policy changes executable backend behavior.
+- [x] Direct API calls cannot bypass factor eligibility.
+- [x] Challenge replay and expiry are enforced.
+- [x] Execution remains clearly labeled as simulated.
+
+---
+
+## PHASE 5: React decision console 🔴
+
+### Live decision view
+
+- [x] **[WEB]** Create scenario submission form and backend preset loader.  
+  Commit: `feat(web): add backend driven scenario form`
+
+- [x] **[WEB]** Show transaction, scalar risk, policy version, and signal-provenance summary.  
+  Commit: `feat(web): display decision context`
+
+- [x] **[WEB]** Show all threat hypotheses with support and evidence.  
+  Commit: `feat(web): display threat assessments`
+
+- [x] **[WEB]** Show trust-domain states without percentages.  
+  Commit: `feat(web): display trust assessments`
+
+- [x] **[WEB]** Show selected factor and final action.  
+  Commit: `feat(web): display selected outcome`
+
+### Causality trace view
+
+- [x] **[WEB]** Render an expandable evidence-to-outcome trace from persisted trace events.  
+  Commit: `feat(web): render causality trace`
+
+- [x] **[WEB]** Default to selected factor plus the most significant rejected factor.  
+  Commit: `feat(web): focus primary decision path`
+
+- [x] **[WEB]** Add evidence, rule, and dependency detail drawers.  
+  Commit: `feat(web): inspect causality nodes`
+
+### Factor inspector
+
+- [x] **[WEB]** List every factor as eligible, ineligible, or unavailable.  
+  Commit: `feat(web): add factor inspector`
+
+- [x] **[WEB]** Show failed trust, capability, and assurance requirements.  
+  Commit: `feat(web): explain factor failures`
+
+- [x] **[WEB]** Show activated rule IDs and relevant evidence references.  
+  Commit: `feat(web): expose factor rule trace`
+
+### Factor execution
+
+- [x] **[WEB]** Add selected-factor challenge action.  
+  Commit: `feat(web): execute selected challenge`
+
+- [x] **[WEB]** Show policy rejection when attempting a blocked factor in demo mode.  
+  Commit: `feat(web): demonstrate backend enforcement`
+
+- [x] **[WEB]** Label simulated execution in every relevant state.  
   Commit: `feat(web): disclose simulated authentication`
 
-- [ ] **[TEST]** Test allowed challenge, blocked-factor rejection, expiry, replay, and transaction-state update.  
-  Commit: `test(auth): cover challenge lifecycle`
-
 ### Exit gate
 
-- [ ] The selected factor can execute through an adapter.
-- [ ] The backend prevents bypassing policy through direct API calls.
-- [ ] Challenge state is persisted and replay-safe.
-- [ ] The UI explicitly labels simulation.
+- [x] All product decisions come from API responses.
+- [x] The core causality chain is understandable without reading raw JSON.
+- [x] Every rejected factor answers why it failed.
+- [x] The challenge flow proves server enforcement.
 
 ---
 
-## ☐ PHASE 7 - Real WebAuthn 🟡 STRETCH
+## PHASE 6: Replay and decision diff 🔴
 
-Attempt only when Phases 0 through 6 pass and the full fallback demo is stable.
+- [x] **[CORE]** Implement semantic decision comparison excluding IDs and timestamps.  
+  Commit: `feat(core): compare semantic decisions`
 
-- [ ] **[AUTH]** Add WebAuthn credential table containing public credential data only.  
-  Commit: `feat(auth): add webauthn credential storage`
+- [x] **[REPLAY]** Implement exact replay service using the original normalized evidence and policy version.  
+  Commit: `feat(replay): add exact decision replay`
 
-- [ ] **[AUTH]** Add registration-options and registration-verification endpoints.  
-  Commit: `feat(auth): add passkey registration`
+- [x] **[REPLAY]** Implement fork replay with evidence changes.  
+  Commit: `feat(replay): fork decision evidence`
 
-- [ ] **[AUTH]** Add authentication-options and authentication-verification through the factor adapter.  
-  Commit: `feat(auth): add passkey authentication`
+- [x] **[REPLAY]** Implement fork replay with capability changes.  
+  Commit: `feat(replay): fork decision capabilities`
 
-- [ ] **[AUTH]** Bind server challenge state to decision ID, transaction ID, and expiry.  
-  Commit: `feat(auth): bind passkey challenge to decision`
+- [x] **[REPLAY]** Preserve source link and never mutate the original.  
+  Commit: `feat(replay): preserve immutable decision lineage`
 
-- [ ] **[TEST]** Verify origin, relying-party ID, expiry, consumed challenge, and credential ownership.  
-  Commit: `test(auth): validate webauthn ceremony`
+- [x] **[CORE]** Build structured diff sections:
+  - input differences,
+  - threat differences,
+  - trust differences,
+  - factor differences,
+  - rule differences,
+  - selection differences.
+  
+  Commit: `feat(core): build structured decision diff`
 
-- [ ] **[WEB]** Add passkey enrollment for the synthetic demo user.  
-  Commit: `feat(web): enroll demo passkey`
+- [x] **[API]** Add replay creation, retrieval, and diff endpoints.  
+  Commit: `feat(api): expose decision replay`
 
-- [ ] **[WEB]** Add real passkey authentication with automatic fallback to the labeled simulated adapter only in demo mode.  
-  Commit: `feat(web): execute passkey challenge`
+- [x] **[WEB]** Create Replay and Diff view.  
+  Commit: `feat(web): add replay laboratory`
 
-- ✂ KILL real WebAuthn if it requires changing the demo host, browser profile, or critical-path API contracts.
-- ✂ KILL real WebAuthn if registration or authentication is not stable on the exact presentation environment.
-- ✂ KILL real WebAuthn if fallback labeling becomes ambiguous.
+- [x] **[WEB]** Allow limited edits to supported evidence and capabilities only.  
+  Commit: `feat(web): add controlled replay inputs`
 
-### Exit gate
+- [x] **[TEST]** Prove exact replay is semantically identical.  
+  Commit: `test(replay): verify exact determinism`
 
-- [ ] Registration and authentication work on the exact demo origin.
-- [ ] Credentials persist for the presentation profile.
-- [ ] Failure cannot break the decision or audit demo.
-- [ ] Simulated adapter remains a clearly labeled fallback.
-
----
-
-## ☐ PHASE 8 - Security and reliability hardening 🔴 BLOCKING
-
-- [ ] **[API]** Add payload size limits.  
-  Commit: `fix(api): limit request payloads`
-
-- [ ] **[API]** Add basic rate limiting to decision and challenge endpoints.  
-  Commit: `fix(api): rate limit critical endpoints`
-
-- [ ] **[API]** Restrict CORS to the configured frontend origin.  
-  Commit: `fix(api): restrict cors origin`
-
-- [ ] **[API]** Add correlation ID to request logs and error responses.  
-  Commit: `feat(api): add request correlation ids`
-
-- [ ] **[API]** Ensure logs exclude raw credentials, challenge secrets, and unnecessary personal data.  
-  Commit: `fix(api): redact sensitive logs`
-
-- [ ] **[DATA]** Verify all multi-write decision and verification flows use database transactions.  
-  Commit: `fix(data): enforce atomic state changes`
-
-- [ ] **[TEST]** Test malformed payload, unknown user, unknown device, duplicate transaction, missing signal, provider failure, blocked factor, expired challenge, and replay.  
-  Commit: `test: cover critical failure paths`
-
-- [ ] **[TEST]** Configure `npm run check` to run type-check, tests, and builds for all packages.  
-  Commit: `chore: add full stack quality gate`
-
-- [ ] **[TEST]** Add smoke script that resets demo data, creates both decisions, retrieves audits, executes the simulated passkey, and prints PASS or FAIL.  
-  Commit: `test: add end to end smoke script`
+- [x] **[TEST]** Prove one-signal forks produce the documented diff.  
+  Commit: `test(replay): verify signal decision diff`
 
 ### Exit gate
 
-- [ ] Full check passes.
-- [ ] Smoke script passes from a fresh demo database.
-- [ ] Direct requests cannot challenge blocked factors.
-- [ ] Replays and expired challenges fail.
-- [ ] Logs are useful without exposing secrets.
+- [x] Exact replay validates deterministic reasoning.
+- [x] Fork replay changes only declared inputs.
+- [x] Diff separates input, derived-state, rule, and outcome changes.
+- [x] Original decisions remain immutable.
 
 ---
 
-## ☐ PHASE 9 - Demo experience and polish 🔴 BLOCKING
+## PHASE 7: Verified remediation 🔴
 
-- [ ] **[DEMO]** Default landing view explains the product in one sentence.  
-  Commit: `style(web): clarify product value`
+- [x] **[CORE]** Define remediation candidates from failed requirements.  
+  Commit: `feat(core): derive remediation candidates`
 
-- [ ] **[DEMO]** Make `same risk` the first comparison anchor.  
-  Commit: `style(web): emphasize shared risk`
+- [x] **[CORE]** Verify each candidate by replaying the decision.  
+  Commit: `feat(core): verify remediation through replay`
 
-- [ ] **[DEMO]** Make signal provenance and synthetic labels visible but not dominant.  
-  Commit: `style(web): clarify signal provenance`
+- [x] **[CORE]** Return minimal verified change sets, not templated promises.  
+  Commit: `feat(core): minimize verified remediation sets`
 
-- [ ] **[DEMO]** Make blocked-factor reasons the main visual proof.  
-  Commit: `style(web): emphasize factor decisions`
+- [x] **[API]** Add factor-remediation verification endpoint.  
+  Commit: `feat(api): expose verified factor remediation`
 
-- [ ] **[DEMO]** Make persisted audit events readable as a compact timeline.  
-  Commit: `style(web): polish audit timeline`
+- [x] **[WEB]** Show remediation beneath failed requirements in the factor inspector.  
+  Commit: `feat(web): display verified remediation`
 
-- [ ] **[DEMO]** Add a visible API-response inspector or copy-JSON action.  
+- [x] **[WEB]** Use precise language:
+  - `would become eligible`, only when verified,
+  - `would be selected`, only when verified as selected,
+  - `remains ineligible`, when other conditions still fail.
+  
+  Commit: `fix(web): enforce counterfactual claim precision`
+
+- [x] **[TEST]** Cover single-condition and multi-condition remediation.  
+  Commit: `test(core): verify remediation correctness`
+
+### Exit gate
+
+- [x] No remediation is emitted without replay verification.
+- [x] Multi-failure factors do not receive misleading single-cause claims.
+- [x] The UI distinguishes eligibility from final selection.
+
+---
+
+## PHASE 8: Hardening and quality 🔴
+
+- [x] **[API]** Add payload and request-rate limits.  
+  Commit: `fix(api): constrain critical endpoints`
+
+- [x] **[API]** Restrict CORS to the configured frontend origin.  
+  Commit: `fix(api): restrict cors`
+
+- [x] **[API]** Redact sensitive fields from logs.  
+  Commit: `fix(api): redact structured logs`
+
+- [x] **[DATA]** Verify atomic decision, challenge, and replay writes.  
+  Commit: `fix(data): enforce transactional writes`
+
+- [x] **[TEST]** Cover malformed policy, unknown factor, unknown trust domain, corrupt policy hash, provider failure, duplicate transaction, stale evidence, conflicting threat evidence, blocked challenge, expiry, replay, and missing capability.  
+  Commit: `test: cover critical failure modes`
+
+- [x] **[TEST]** Implement root `npm run check`.  
+  Commit: `chore: add full quality gate`
+
+- [x] **[TEST]** Implement `npm run smoke`.  
+  Commit: `test: add end to end smoke gate`
+
+- [x] **[DOCS]** Verify all UI and README claims against the implemented model.  
+  Commit: `docs: enforce product claim discipline`
+
+### Exit gate
+
+- [x] Full check passes.
+- [x] Smoke passes from a fresh demo database.
+- [x] Unsupported or ambiguous evidence yields conservative output.
+- [x] No raw secret or private credential material is logged or stored.
+
+---
+
+## PHASE 9: Demo polish 🔴
+
+- [x] **[DEMO]** Make the trust-propagation chain the primary visual.  
+  Commit: `style(web): emphasize trust propagation`
+
+- [x] **[DEMO]** Use consistent state language and colors for evidence, threat, trust, factors, and outcome.  
+  Commit: `style(web): unify decision states`
+
+- [x] **[DEMO]** Ensure state is never communicated by color alone.  
+  Commit: `fix(web): add accessible state labels`
+
+- [x] **[DEMO]** Add one-click SIM, phishing, and constrained-capability scenarios.  
+  Commit: `feat(web): add judge demo presets`
+
+- [x] **[DEMO]** Add one-click replay fork for `passkey enrolled: true -> false`.  
+  Commit: `feat(web): add remediation demo fork`
+
+- [x] **[DEMO]** Add API-response inspection for technical judges.  
   Commit: `feat(web): expose machine readable decision`
 
-- [ ] **[DEMO]** Add one-click demo reset backed by the API.  
-  Commit: `feat(web): reset deterministic demo data`
+- [x] **[DEMO]** Remove any panel that does not support the reasoning or enforcement proof.  
+  Commit: `style(web): remove nonessential interface`
 
-- [ ] **[DEMO]** Remove decorative panels without demo value.  
-  Commit: `style(web): remove visual noise`
-
-- [ ] **[TEST]** Verify the complete flow without editing query strings, database rows, or source code.  
-  Commit: `test: verify judge facing demo path`
+- [x] **[DEMO]** Add deterministic backend reset in demo mode.  
+  Commit: `feat(api): reset deterministic demo state`
 
 ### Exit gate
 
-- [ ] A judge can see that the backend returned the decision.
-- [ ] A judge can see that the decision was persisted.
-- [ ] A judge can see why each factor was allowed or blocked.
-- [ ] A judge can execute the selected factor through an adapter.
-- [ ] Reset restores deterministic state.
+- [x] A screenshot communicates evidence, trust degradation, factor rejection, and selection.
+- [x] A live interaction proves backend enforcement.
+- [x] Replay proves determinism and counterfactual reasoning.
+- [x] The interface remains focused on four principal views.
 
 ---
 
-## ☐ PHASE 10 - Documentation and submission 🔴 BLOCKING
+## PHASE 10: Documentation and submission 🔴
 
-- [ ] **[DOCS]** Update `README.md` with product, architecture, data flow, setup, API, demo, limitations, and security boundaries.  
-  Commit: `docs: write full stack project readme`
+- [x] **[DOCS]** Update README with product boundary, architecture, setup, API, scenarios, limitations, and security claims.  
+  Commit: `docs: write final project readme`
 
-- [ ] **[DOCS]** Add architecture diagram showing client, API, engines, providers, factors, and SQLite.  
-  Commit: `docs: add system architecture diagram`
+- [x] **[DOCS]** Add architecture and causality diagrams.  
+  Commit: `docs: add product architecture diagrams`
 
-- [ ] **[DOCS]** Document every mock provider and the real production seam it represents.  
-  Commit: `docs: document integration boundaries`
+- [x] **[DOCS]** Document factor-catalog extension with one example factor.  
+  Commit: `docs: explain declarative factor extension`
 
-- [ ] **[DOCS]** Complete `DECISIONS.md` with rejected Redis, microservices, live APIs, and unsupported AI claims.  
+- [x] **[DOCS]** Document evidence-provider extension with one example provider.  
+  Commit: `docs: explain evidence provider extension`
+
+- [x] **[DOCS]** Complete decision records for all scope cuts and abstractions.  
   Commit: `docs: finalize architecture decisions`
 
-- [ ] **[DOCS]** Write `docs/demo-script.md`.  
-  Commit: `docs: add final product demo script`
+- [x] **[DOCS]** Write final demo script.  
+  Commit: `docs: add final demo script`
 
-- [ ] **[TEST]** Verify clone-to-run instructions on a clean environment.  
-  Commit: `test: verify setup runbook`
+- [x] **[TEST]** Verify clone, migrate, seed, run, check, and smoke instructions in a clean environment.  
+  Commit: `test: verify clean setup runbook`
 
-- [ ] **[TEST]** Scan tracked files and Git history for secrets.  
+- [x] **[TEST]** Scan the repository and Git history for secrets.  
   Commit: `chore: complete secrets review`
 
-- [ ] **[DEMO]** Capture one backup recording after smoke passes.  
+- [x] **[DEMO]** Capture a backup recording after the final smoke pass.  
   Commit: `docs: add demo recording reference`
 
 ### Exit gate
 
-- [ ] README makes the backend product boundary obvious.
-- [ ] API examples match the implementation.
-- [ ] Mock versus real boundaries are explicit.
-- [ ] Demo script matches the shipped product.
-- [ ] No secret or credential is committed.
+- [ ] A senior engineer can understand the trust abstraction from the README.
+- [ ] API examples match actual contracts.
+- [ ] All mock and synthetic boundaries are explicit.
+- [ ] The demo script matches the shipped product exactly.
 
 ---
 
-# PART 8 - Demo script skeleton
+# 10. Stretch phases
 
-## Opening hook
+## Stretch A: Real WebAuthn
 
-> A high-risk score can tell a bank to add authentication. It cannot tell the bank whether the authentication channel itself is compromised.
+Attempt only after every mandatory phase passes.
 
-## Flow
+- [ ] Store public credential data only.
+- [ ] Implement registration options and verification.
+- [ ] Implement authentication options and verification.
+- [ ] Bind challenge state to decision and transaction.
+- [ ] Validate origin, relying-party ID, credential owner, expiry, and consumption.
+- [ ] Keep the simulated adapter as an explicit demo fallback.
 
-1. Submit a ₹50,000 synthetic transaction through the React client.
-2. Show that the request reaches `POST /api/v1/decisions`.
-3. Display the backend response: high risk, SIM-channel-compromise hypothesis, passkey allowed, SMS OTP blocked.
-4. Open the audit timeline and show the persisted reasons and policy version.
-5. Create the phishing scenario with the same risk level.
-6. Compare both backend decision IDs side by side.
-7. Show that the scalar baseline returns the same high-level requirement while threat-aware reasons differ.
-8. Attempt to create an SMS challenge and show the backend rejects the blocked factor.
-9. Continue with the selected passkey adapter.
-10. Show challenge verification and the authorization audit event.
-11. Disable passkey enrollment and rerun the transaction.
-12. Show assisted recovery rather than unsafe SMS fallback.
+**Kill immediately if:** WebAuthn requires changing the stable decision contract, demo host, browser profile, or core demo path.
 
-## Wow moment
+## Stretch B: Policy-version replay
 
-The strongest moment is not a chart. It is a direct API enforcement proof:
+- [ ] Add candidate policy `v1.1.0` with one deliberate rule change.
+- [ ] Replay an existing decision under the candidate policy.
+- [ ] Show actual policy-rule differences separately from input differences.
+- [ ] Never label input changes as policy differences.
+
+## Stretch C: Derived compatibility matrix
+
+- [ ] Generate threat-factor compatibility as a read-only projection.
+- [ ] Every cell links to evaluated dependencies and rules.
+- [ ] The matrix must never become a second source of truth.
+
+---
+
+# 11. Demo script
+
+## Opening
+
+> Two transactions can have the same risk level while weakening completely different trust dependencies.
+
+## Scene 1: Create a real backend decision
+
+1. Load the ₹50,000 SIM-change scenario.
+2. Submit the transaction to the backend.
+3. Show the persisted decision ID and policy hash.
+4. Show multiple threat assessments, not a single unexplained label.
+5. Open the causality trace:
 
 ```text
-POST /api/v1/challenges
-factor = SMS_OTP
-
--> rejected because the persisted policy decision blocked the channel
+Recent SIM change
+  -> SIM-channel-compromise support: Strong
+  -> SIM ownership: Distrusted
+  -> SMS OTP requirement failed
+  -> SMS OTP ineligible
+  -> Passkey eligible
+  -> Passkey selected
 ```
 
-Then execute the selected passkey adapter successfully.
+## Scene 2: Prove enforcement
+
+1. Attempt to create an SMS OTP challenge.
+2. Show the backend rejection referencing the persisted decision.
+3. Execute the selected simulated passkey challenge.
+4. Show the completion trace event.
+
+## Scene 3: Same risk, different trust effect
+
+1. Load the phishing scenario with the same risk level.
+2. Show independent threat assessments.
+3. Show different trust impacts and rule activations.
+4. Compare both decisions.
+
+## Scene 4: Replay and verified remediation
+
+1. Open the first decision in Replay.
+2. Toggle passkey enrollment off.
+3. Run the forked replay.
+4. Show that the threat and SIM trust states remain unchanged.
+5. Show passkey becoming unavailable and assisted recovery becoming the outcome.
+6. Open the passkey factor inspector.
+7. Show the verified remediation:
+
+```text
+Enroll a passkey.
+Verified result: Passkey becomes eligible and selected under this decision context.
+```
 
 ## Closing
 
-> This is not a static risk dashboard. It is an integration-ready decision service: signals enter through an API, policy is enforced on the server, factor challenges cannot bypass the decision, and every result is auditable.
+> The engine does not hardcode that SIM swap blocks SMS. It models what each factor depends on, changes trust based on evidence, derives eligibility, and enforces the result on the server.
 
 ---
 
-# PART 9 - Kill criteria and cut order
+# 12. Definition of done
 
-## Immediate kill criteria
+## Decision intelligence
 
-- ✂ Remove Redis if proposed.
-- ✂ Remove microservice separation if proposed.
-- ✂ Remove live carrier, UPI, Account Aggregator, device-intelligence, or IP-reputation integrations if credentials, approvals, or unstable networks are required.
-- ✂ Remove real SMS delivery. Never send an actual OTP for this prototype.
-- ✂ Remove real WebAuthn before weakening the API, decision, persistence, or audit path.
-- ✂ Remove user login before weakening factor-policy enforcement.
-- ✂ Remove dashboard analytics before weakening the transaction decision flow.
-- ✂ Remove extra threat classes before weakening the two hero scenarios.
-- ✂ Remove rich device fingerprinting before weakening signal provenance.
-- ✂ Remove deployment automation before weakening local reproducibility.
+- [ ] Supported threats are assessed independently.
+- [ ] Every threat assessment cites supporting and conflicting evidence.
+- [ ] Trust states are ordinal and reasoned, not numeric percentages.
+- [ ] Factor eligibility is derived from declarative dependencies.
+- [ ] Capability, assurance, and trust failures remain distinct.
+- [ ] Friction applies only after hard eligibility gates.
+- [ ] No factor-specific branch exists in the evaluator.
 
-## Cut order if the build slips
+## Policy integrity
 
-1. Real WebAuthn
-2. JSON inspector polish
-3. Side-by-side comparison layout; retain sequential scenario history
-4. Device and session preset editor; retain two fixed presets from the backend
-5. Baseline visualization; retain baseline output in API or demo narration
-6. CSS transitions
-7. Audit filtering; retain ordered audit list
+- [ ] Every decision stores bundle ID, version, and content hash.
+- [ ] Active policies are immutable.
+- [ ] Every factor and trace output references evaluated rules.
+- [ ] Policy validation rejects corrupt references.
 
-## Never cut
+## Enforcement
 
-- Backend decision endpoint
-- Runtime request validation
-- Pure risk, threat, and policy engines
-- SQLite persistence
-- Factor-level allowed, blocked, and unavailable decisions
-- Audit event storage and retrieval
-- Backend rejection of blocked-factor challenge creation
-- Simulated passkey adapter
-- Two API-driven hero scenarios
-- Synthetic-signal disclosure
-- Automated smoke test
+- [ ] Blocked and unavailable factors cannot create challenges.
+- [ ] Selected eligible factors can create challenges.
+- [ ] Expired and consumed challenges fail.
+- [ ] Challenge outcome is appended to the trace.
 
----
+## Replay and explanation
 
-# PART 10 - Definition of done
+- [ ] Exact replay produces a semantically identical result.
+- [ ] Forked replay never mutates the original.
+- [ ] Decision diff separates input, derived, rule, and outcome changes.
+- [ ] Counterfactual claims are replay-verified.
+- [ ] Multi-failure factors display multi-condition remediation when required.
 
-## Product
+## Product interface
 
-- [ ] React submits a transaction to the backend.
-- [ ] Backend returns risk, threat, allowed factors, blocked factors, selected factor, action, reasons, and policy version.
-- [ ] SIM-change scenario blocks SMS OTP.
-- [ ] Phishing scenario blocks SMS OTP for its own documented reason.
-- [ ] Passkey is selected only when enrolled and policy-eligible.
-- [ ] No surviving factor produces assisted recovery.
-- [ ] Frontend retrieves a persisted decision and audit timeline.
+- [ ] Live Decision view works.
+- [ ] Causality Trace view works.
+- [ ] Factor Inspector view works.
+- [ ] Replay and Diff view works.
+- [ ] Signal provenance and synthetic status are visible.
+- [ ] No cosmetic dashboard is required to understand the product.
 
-## Backend
+## Reliability
 
-- [ ] Input and output contracts are runtime-validated.
-- [ ] Risk, threat, and policy engines are pure and unit-tested.
-- [ ] Decision creation is atomic.
-- [ ] Duplicate client transaction handling is defined and tested.
-- [ ] Health endpoint verifies database availability.
-- [ ] Provider provenance is persisted.
-
-## Authentication enforcement
-
-- [ ] A blocked factor cannot create a challenge.
-- [ ] An unavailable factor cannot create a challenge.
-- [ ] An allowed selected factor can create a challenge.
-- [ ] Expired or consumed challenge verification fails.
-- [ ] Successful verification updates transaction state and audit log.
-- [ ] Simulated execution is clearly labeled.
-
-## Demo
-
-- [ ] Same-risk hero scenarios are available as one-click presets.
-- [ ] Backend response is visible.
-- [ ] Audit persistence is visible.
-- [ ] SMS challenge rejection is visible.
-- [ ] Selected factor execution is visible.
-- [ ] Passkey-unavailable recovery path is visible.
-- [ ] Demo reset is deterministic.
-- [ ] No external API or network dependency can break the core flow.
+- [ ] `npm run check` passes.
+- [ ] `npm run smoke` passes on a fresh database.
+- [ ] All critical failure paths are tested.
+- [ ] Reset restores deterministic demo state.
+- [ ] The core demo uses no external provider.
 
 ## Integrity
 
-- [ ] No calibrated-probability claim appears.
-- [ ] No live-provider claim appears.
-- [ ] No compliance or production-readiness claim appears.
-- [ ] No real payment or real customer data is used.
-- [ ] No secrets exist in the repository or history.
-
-## Quality gate
-
-- [ ] `npm run check` passes.
-- [ ] End-to-end smoke script passes on a fresh database.
-- [ ] README setup steps work.
-- [ ] Demo script matches the shipped interface and API.
-- [ ] Backup recording exists.
+- [ ] No fake probabilities or trust percentages appear.
+- [ ] No live integration is implied for a mock provider.
+- [ ] No fraud-detection, compliance, or production-readiness claim appears.
+- [ ] No real customer or payment data is used.
+- [ ] No secrets or private credential material are committed.
 
 ---
 
-# PART 11 - Critical path
+# 13. Cut order if execution slips
 
-```text
-Contracts
-  -> SQLite schema
-  -> repositories
-  -> pure decision engines
-  -> POST /decisions
-  -> persisted audit trail
-  -> React transaction submission
-  -> decision visualization
-  -> factor adapter
-  -> blocked-factor enforcement
-  -> end-to-end smoke
-  -> demo polish
-  -> real WebAuthn only if everything above is stable
-```
+Cut in this order:
+
+1. Real WebAuthn
+2. Derived compatibility matrix
+3. Candidate-policy replay
+4. Evidence timeline visualization
+5. API JSON inspector polish
+6. TOTP and PIN display polish
+7. Trace animations
+
+Never cut:
+
+1. Multi-hypothesis threat assessment
+2. Dependency trust assessment
+3. Declarative factor catalog
+4. Capability and assurance separation
+5. Structured causality trace
+6. Policy version and hash
+7. Backend challenge enforcement
+8. Decision replay and diff
+9. Verified remediation
+10. Provenance and synthetic disclosure
+11. Automated checks and smoke test
 
 ---
 
-# Final implementation rule
+# 14. Final implementation rule
 
-Before adding a component, endpoint, table, provider, or dependency, ask:
+Before adding any rule, factor, provider, endpoint, table, or UI panel, ask:
 
-> Does this make the service more convincingly deployable, more enforceable, or more impressive in the judged flow?
+> Does this strengthen dependency-driven reasoning, server enforcement, reproducibility, or the judge's ability to understand the decision?
 
-If it does not strengthen the API decision, persistence, factor enforcement, audit evidence, or demo reliability, do not build it.
+If the answer is no, do not build it.
